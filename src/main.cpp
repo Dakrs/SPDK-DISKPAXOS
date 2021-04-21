@@ -1,4 +1,3 @@
-#include <iostream>
 #include <array>
 #include <iostream>
 #include "BankCommand.hpp"
@@ -63,24 +62,27 @@ int main(int argc, char const *argv[]) {
 	db2.mbal = 1;
 	db2.slot = 4;
 
+	DiskBlock empty_block = DiskBlock();
+
+	int k = 20;
+	int NUM_PROCESSES = 4;
+
+	std::future<void> f1 = initialize("0000:03:00.0",k);
+	f1.get();
+	std::cout << "initialize block completed" << std::endl;
+
+	std::future<void> f2 = write("0000:03:00.0",db2,5,3);
+	f2.get();
+
+	std::future<unique_ptr<vector<unique_ptr<DiskBlock>>>> f5 = read_full("0000:03:00.0",5);
+
+	auto db5 = f5.get();
+	std::vector<unique_ptr<DiskBlock>>::iterator it = db5->begin();
+
+	for(; it != db5->end(); it++){
+		std::cout << (*it)->toString() << std::endl;
+	}
 	/**
-	string d_ser = db.serialize();
-	char * db_serialized_char = &d_ser[0];
-	string rec(db_serialized_char,d_ser.length());
-
-	std::cout << d_ser.length() << std::endl;
-	std::cout << db_serialized_char << ":1" << std::endl;
-	std::cout << d_ser << std::endl;
-	std::cout << rec << std::endl;
-
-	byte * buffer = new byte[0x1000];
-	string_to_bytes(d_ser, buffer);
-	std::string result = bytes_to_string(buffer);
-	std::cout << result << std::endl;
-
-	bool t = result == d_ser;
-	std::cout << t << std::endl;*/
-
 	std::future<void> f1 = write("0000:03:00.0",db,0,0);
 	f1.get();
 	std::cout << "write completed" << std::endl;
@@ -100,7 +102,7 @@ int main(int argc, char const *argv[]) {
 
 	for(; it != db5->end(); it++){
 		std::cout << (*it)->toString() << std::endl;
-	}
+	}*/
 
 	spdk_library_end();
 

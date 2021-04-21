@@ -4,7 +4,7 @@ SPDK_DIR=~/spdk
 PKG_CONFIG_PATH=$(SPDK_DIR)/build/lib/pkgconfig
 SYS_LIB := $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --libs --static spdk_syslibs)
 DPDK_LIB_MAN = -Wl,--no-whole-archive $(SPDK_DIR)/build/lib/libspdk_env_dpdk.a -Wl,-rpath-link $(SPDK_DIR)/dpdk/build/lib -Wl,--whole-archive $(SPDK_DIR)/dpdk/build/lib/librte_eal.a $(SPDK_DIR)/dpdk/build/lib/librte_mempool.a $(SPDK_DIR)/dpdk/build/lib/librte_ring.a $(SPDK_DIR)/dpdk/build/lib/librte_mbuf.a $(SPDK_DIR)/dpdk/build/lib/librte_bus_pci.a $(SPDK_DIR)/dpdk/build/lib/librte_pci.a $(SPDK_DIR)/dpdk/build/lib/librte_mempool_ring.a $(SPDK_DIR)/dpdk/build/lib/librte_power.a $(SPDK_DIR)/dpdk/build/lib/librte_ethdev.a $(SPDK_DIR)/dpdk/build/lib/librte_net.a $(SPDK_DIR)/dpdk/build/lib/librte_telemetry.a $(SPDK_DIR)/dpdk/build/lib/librte_kvargs.a $(SPDK_DIR)/dpdk/build/lib/librte_vhost.a $(SPDK_DIR)/dpdk/build/lib/librte_cryptodev.a $(SPDK_DIR)/dpdk/build/lib/librte_hash.a $(SPDK_DIR)/dpdk/build/lib/librte_rcu.a -Wl,--no-whole-archive
-SPDK_LIBS := $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --libs spdk_nvme spdk_vmd)
+SPDK_LIBS := $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --libs spdk_nvme spdk_vmd spdk_event)
 SPDK_LIBS_FLAGS := -L$(SPDK_DIR)/build/lib -Wl,--whole-archive -Wl,--no-as-needed $(SPDK_LIBS) -Wl,--no-whole-archive
 
 
