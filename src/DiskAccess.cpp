@@ -7,7 +7,7 @@ extern "C" {
 	#include "spdk/env.h"
 }
 
-#include "DiskAccess.hpp"
+#include "Disk/DiskAccess.hpp"
 #include <map>
 #include <string>
 #include <set>
@@ -114,6 +114,8 @@ the first 4 bytes keep the size of the block.
 
 static void string_to_bytes(std::string str, byte * buffer){
 	int size = str.length();
+
+	//é preciso dar throw a um erro caso o tamanho da string seja superior ao tamanho dos blocos.
 
 	buffer[0] = size & 0x000000ff;
 	buffer[1] = ( size & 0x0000ff00 ) >> 8;
@@ -282,7 +284,6 @@ static void write_complete(void *arg,const struct spdk_nvme_cpl *completion){
 
   spdk_free(cb->buffer);
   cb->status = 1;
-  //delete cb;
   cb->callback.set_value();
 }
 
@@ -474,8 +475,6 @@ static void read_event(void * arg1, void * arg2){
 				exit(1);
 	}
 
-	std::cout << "read block started" << std::endl;
-
 	uint32_t target_core = it->second->internal_id / spdk_env_get_core_count(); //compute the core where the event should run in order that only 1 thread accesses the NVME QUEUE
 
 	struct spdk_event * e = spdk_event_allocate(target_core,verify_event<std::unique_ptr<DiskBlock>>,cb,NULL);
@@ -561,8 +560,6 @@ static void read_full_event(void * arg1, void * arg2){
 				fprintf(stderr, "starting write I/O failed\n");
 				exit(1);
 	}
-
-	std::cout << "read full block started" << std::endl;
 
 	uint32_t target_core = it->second->internal_id / spdk_env_get_core_count(); //compute the core where the event should run in order that only 1 thread accesses the NVME QUEUE
 

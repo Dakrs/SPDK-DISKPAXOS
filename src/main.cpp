@@ -1,22 +1,22 @@
 #include <array>
 #include <iostream>
 #include "BankCommand.hpp"
-#include "DiskBlock.hpp"
+#include "Disk/DiskBlock.hpp"
 #include <sstream>
 #include <cereal/archives/binary.hpp>
-#include "DiskAccess.hpp"
+#include "Disk/DiskAccess.hpp"
 #include <chrono>
 #include <thread>
 #include <cstring>
 #include <stdio.h>
 #include <vector>
+#include "Test/disk_isomorphic_test.hpp"
 
 
 
 using namespace std;
 
 int main(int argc, char const *argv[]) {
-
   /**
   std::cout << "Hello World!" << endl;
 
@@ -42,6 +42,8 @@ int main(int argc, char const *argv[]) {
   db2.deserialize(db_serialized);
 
   cout << db2.toString() << endl;*/
+
+	/*
 	int res = spdk_library_start();
 
 	if (res)
@@ -51,8 +53,8 @@ int main(int argc, char const *argv[]) {
   BankCommand bs = BankCommand("Teste",aux);
 	vector<int> aux2 = {45,123,2};
 	BankCommand bs2 = BankCommand("Teste2",aux);
-	string s2 = bs.serialize();
 	string s = bs.serialize();
+	string s2 = bs2.serialize();
 	DiskBlock db = DiskBlock();
   db.input = s;
 
@@ -72,7 +74,13 @@ int main(int argc, char const *argv[]) {
 	std::cout << "initialize block completed" << std::endl;
 
 	std::future<void> f2 = write("0000:03:00.0",db2,5,3);
+	std::future<void> f3 = write("0000:03:00.0",db,5,3);
+	std::future<void> f4 = write("0000:03:00.0",db2,5,2);
+
 	f2.get();
+	f3.get();
+	f4.get();
+
 
 	std::future<unique_ptr<vector<unique_ptr<DiskBlock>>>> f5 = read_full("0000:03:00.0",5);
 
@@ -81,7 +89,7 @@ int main(int argc, char const *argv[]) {
 
 	for(; it != db5->end(); it++){
 		std::cout << (*it)->toString() << std::endl;
-	}
+	}*/
 	/**
 	std::future<void> f1 = write("0000:03:00.0",db,0,0);
 	f1.get();
@@ -104,7 +112,15 @@ int main(int argc, char const *argv[]) {
 		std::cout << (*it)->toString() << std::endl;
 	}*/
 
-	spdk_library_end();
+	//spdk_library_end();
+
+	DiskTest disktest(20,4); //lanes, n_processes
+
+	bool res = disktest.single_write_read_test();
+	bool res2 = disktest.multi_write_read_test(100000);
+
+	std::cout << res << std::endl;
+	std::cout << res2 << std::endl;
 
   return 0;
 }
