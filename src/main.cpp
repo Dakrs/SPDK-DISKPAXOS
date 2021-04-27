@@ -114,13 +114,27 @@ int main(int argc, char const *argv[]) {
 
 	//spdk_library_end();
 
+	/**
+
+	#### AUTOMATED TESTING ####
+
 	DiskTest disktest(20,4); //lanes, n_processes
 
 	bool res = disktest.single_write_read_test();
-	bool res2 = disktest.multi_write_read_test(100000);
+	bool res2 = disktest.multi_write_read_test(100);
 
 	std::cout << res << std::endl;
 	std::cout << res2 << std::endl;
+	*/
+
+	/**
+	int res = spdk_library_start(4);
+
+	std::future<unique_ptr<DiskBlock>> f3 = read("0000:03:00.0",5,3);
+	auto dbf = f3.get();
+	std::cout << "read completed: " << dbf->toString() << std::endl;
+
+	spdk_library_end();*/
 
   return 0;
 }

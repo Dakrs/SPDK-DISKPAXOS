@@ -37,7 +37,7 @@ static DiskBlock gen_random_block(){
 
 DiskTest::DiskTest(int k, int n_p){
   srand( (unsigned) time(NULL) * getpid());
-  int res = spdk_library_start();
+  int res = spdk_library_start(n_p);
 
 	if (res){
     std::cout << "An error occured while initializing SPDK" << std::endl;

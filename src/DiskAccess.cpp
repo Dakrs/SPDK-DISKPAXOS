@@ -22,10 +22,9 @@ extern "C" {
 #include <thread>
 #include <atomic>
 
-#define NUM_PROCESSES 4
-
 typedef unsigned char byte;
 
+int NUM_PROCESSES = 0;
 
 /**
 Struct used to keep track of all controllers found.
@@ -97,7 +96,9 @@ struct CallBack {
 	): buffer(buffer), disk(type), LBA_INDEX(k), size_per_elem(size_per_elem) {
 		status = 0;
 	};
-  ~CallBack(){};
+  ~CallBack(){
+		std::cout << "destroy CallBack object" << std::endl;
+	};
 };
 
 std::set<std::string> addresses; //set with all Controller IP found
@@ -255,7 +256,10 @@ static void run_spdk_event_framework(){
 	spdk_app_fini();
 }
 
-int spdk_library_start(void) {
+int spdk_library_start(int n_p) {
+
+	NUM_PROCESSES = n_p;
+
 	internal_spdk_event_launcher = std::thread(run_spdk_event_framework);
 
 	while(!ready);
@@ -303,6 +307,9 @@ static void verify_event(void * arg1, void * arg2){
 
 		struct spdk_event * e = spdk_event_allocate(target_core,verify_event<T>,cb,NULL);
 		spdk_event_call(e);
+	}
+	else{
+		delete cb;
 	}
 }
 
