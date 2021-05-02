@@ -9,8 +9,8 @@ class DiskTest {
     DiskTest(int k, int n_p);
     ~DiskTest();
     bool single_write_read_test(void);
-    bool multi_write_read_test(int number_of_tests);
-    void run_every_test(void);
+    int multi_write_read_test(int number_of_tests);
+    void run_every_test(int number_of_tests);
 };
 
 #endif

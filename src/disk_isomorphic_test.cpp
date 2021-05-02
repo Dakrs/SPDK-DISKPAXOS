@@ -69,21 +69,29 @@ bool DiskTest::single_write_read_test(void){
   return res;
 }
 
-bool DiskTest::multi_write_read_test(int number_of_tests){
+int DiskTest::multi_write_read_test(int number_of_tests){
 
   bool res = false;
+  int k = 0;
 
   for (int i = 0; i < number_of_tests; i++) {
     res = this->single_write_read_test();
 
-    if (!res)
-      break;
+    if (res)
+      k++;
   }
 
-  return res;
+  return k;
 }
 
-void DiskTest::run_every_test(void){
+void DiskTest::run_every_test(int number_of_tests){
+
+  std::cout << "Running multi random writes and reads" << std::endl;
+  std::cout << "Current config: Value k = " << this->k << " N_PROCESSES = " << this->NUM_PROCESSES << " N_TESTS = " << number_of_tests << std::endl;
+
+  int res = this->multi_write_read_test(number_of_tests);
+
+  std::cout << "Passed " << res << " of " << number_of_tests << " Tests" << std::endl;
 }
 
 DiskTest::~DiskTest(){

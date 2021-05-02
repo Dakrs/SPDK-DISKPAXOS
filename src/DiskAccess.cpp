@@ -96,9 +96,7 @@ struct CallBack {
 	): buffer(buffer), disk(type), LBA_INDEX(k), size_per_elem(size_per_elem) {
 		status = 0;
 	};
-  ~CallBack(){
-		std::cout << "destroy CallBack object" << std::endl;
-	};
+  ~CallBack(){};
 };
 
 std::set<std::string> addresses; //set with all Controller IP found
