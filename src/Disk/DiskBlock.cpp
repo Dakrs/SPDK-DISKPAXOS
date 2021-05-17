@@ -17,6 +17,16 @@ void DiskBlock::copy(DiskBlock & db){
   db.input = this->input;
 }
 
+DiskBlock * DiskBlock::copy(){
+  DiskBlock * db = new DiskBlock();
+  db->bal = this->bal;
+  db->slot = this->slot;
+  db->mbal = this->mbal;
+  db->input = this->input;
+
+  return db;
+}
+
 std::string DiskBlock::serialize(){
 
   std::stringstream ss;
@@ -37,14 +47,26 @@ void DiskBlock::deserialize(std::string str){
   DiskBlock db;
 
   {
-    cereal::BinaryInputArchive iarchive(ss);
-    iarchive(db);
+    try{
+      cereal::BinaryInputArchive iarchive(ss);
+      iarchive(db);
+    }
+    catch (...){
+      db.bal = -1;
+      db.slot = -1;
+      db.mbal = -1;
+      db.input = "";
+    }
   }
 
   this->bal = db.bal;
   this->slot = db.slot;
   this->mbal = db.mbal;
   this->input = db.input;
+}
+
+bool DiskBlock::isValid(){
+  return this->bal != -1 && this->slot != -1 && this->mbal != -1;
 }
 
 DiskBlock::~DiskBlock(){}

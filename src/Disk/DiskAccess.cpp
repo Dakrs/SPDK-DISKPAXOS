@@ -5,6 +5,7 @@ extern "C" {
 	#include "spdk/vmd.h"
 	#include "spdk/nvme_zns.h"
 	#include "spdk/env.h"
+	#include "spdk/thread.h"
 }
 
 #include "Disk/DiskAccess.hpp"
@@ -68,6 +69,26 @@ struct NVME_NAMESPACE {
   };
 };
 
+
+struct CallBackOpts {
+	int LBA_INDEX;
+	size_t size_per_elem;
+
+	CallBackOpts(){
+		LBA_INDEX = 0;
+		size_per_elem = 0;
+	}
+	CallBackOpts(int LBA_VALUE,size_t size_per){
+		LBA_INDEX = LBA_VALUE;
+		size_per_elem = size_per;
+	};
+	CallBackOpts(int LBA_VALUE){
+		LBA_INDEX = LBA_VALUE;
+		size_per_elem = 0;
+	};
+	~CallBackOpts(){};
+};
+
 /**
 class used for event callbacks
 */
@@ -76,25 +97,26 @@ template<class T>
 struct CallBack {
   byte * buffer;
   std::string disk;
-  int LBA_INDEX;
   int status;
   std::promise<T> callback;
-	size_t size_per_elem;
+	CallBackOpts opts;
 
   CallBack(
     byte * buffer,
-    std::string type,
+    std::string disk_id,
     int k
-  ): buffer(buffer), disk(type), LBA_INDEX(k) {
+  ): buffer(buffer), disk(disk_id) {
     status = 0;
+		opts = CallBackOpts(k);
   };
 	CallBack(
 		byte * buffer,
-		std::string type,
+		std::string disk_id,
 		int k,
 		size_t size_per_elem
-	): buffer(buffer), disk(type), LBA_INDEX(k), size_per_elem(size_per_elem) {
+	): buffer(buffer), disk(disk_id){
 		status = 0;
+		opts = CallBackOpts(k,size_per_elem);
 	};
   ~CallBack(){};
 };
@@ -133,6 +155,11 @@ static std::string bytes_to_string(byte * buffer){
             (unsigned char)(buffer[1]) << 8 |
             (unsigned char)(buffer[2]) << 16 |
             (unsigned char)(buffer[3]) << 24);
+
+	if (size > 512){
+		return std::string((char *)buffer,0);
+	}
+
 
 	return std::string((char *)buffer+4,size);
 }
@@ -233,14 +260,14 @@ static void app_init(void * arg){
 
 	ready = true;
 
-	std::cout << "Succeded" << std::endl;
+	std::cout << "Succeded: " << spdk_env_get_core_count() << std::endl;
 }
 
 static void run_spdk_event_framework(){
   struct spdk_app_opts app_opts = {};
   spdk_app_opts_init(&app_opts, sizeof(app_opts));
 	app_opts.name = "event_test";
-	app_opts.reactor_mask = "0x1f";
+	app_opts.reactor_mask = "0x2f";
 
   int rc = spdk_app_start(&app_opts, app_init, NULL);
 
@@ -321,7 +348,7 @@ static void write_event(void * arg1, void * arg2){
   it = namespaces.find(cb->disk);
 
 	int rc = spdk_nvme_ns_cmd_write(it->second->ns, it->second->qpair, cb->buffer,
-						cb->LBA_INDEX, /* LBA start */
+						cb->opts.LBA_INDEX, /* LBA start */
 						1, /* number of LBAs */
 						write_complete, cb, SPDK_NVME_IO_FLAGS_FORCE_UNIT_ACCESS); //submit a write operation to NVME
 
@@ -385,7 +412,7 @@ static void initialize_event(void * arg1, void * arg2){
 
 	int rc = spdk_nvme_ns_cmd_write(it->second->ns, it->second->qpair, cb->buffer,
 						0, /* LBA start */
-						cb->LBA_INDEX, /* number of LBAs */
+						cb->opts.LBA_INDEX, /* number of LBAs */
 						write_complete, cb, SPDK_NVME_IO_FLAGS_FORCE_UNIT_ACCESS); //submit a write operation to NVME
 
 	if (rc != 0) {
@@ -471,7 +498,7 @@ static void read_event(void * arg1, void * arg2){
   it = namespaces.find(cb->disk);
 
 	int rc = spdk_nvme_ns_cmd_read(it->second->ns, it->second->qpair, cb->buffer,
-					 cb->LBA_INDEX, /* LBA start */
+					 cb->opts.LBA_INDEX, /* LBA start */
 					 1, /* number of LBAs */
 					 read_complete, cb, 0);
 
@@ -487,7 +514,7 @@ static void read_event(void * arg1, void * arg2){
 }
 
 
-std::future<std::unique_ptr<DiskBlock>> read(std::string disk,int k,int p_id){
+std::future<std::unique_ptr<DiskBlock>> read(std::string disk,int index){
   std::map<std::string,std::unique_ptr<NVME_NAMESPACE>>::iterator it;
 
   it = namespaces.find(disk);
@@ -495,7 +522,7 @@ std::future<std::unique_ptr<DiskBlock>> read(std::string disk,int k,int p_id){
     throw std::invalid_argument( "Disk not found" );
   }
 
-  int LBA_INDEX = k * NUM_PROCESSES + p_id;
+  int LBA_INDEX = index;
   size_t BUFFER_SIZE = (it->second->lbaf + it->second->metadata_size);
 
   byte * buffer = (byte *) spdk_zmalloc(BUFFER_SIZE, 0x1000, NULL, SPDK_ENV_SOCKET_ID_ANY, SPDK_MALLOC_DMA);
@@ -533,7 +560,7 @@ static void read_full_complete(void *arg, const struct spdk_nvme_cpl *completion
 
   cb->status = 1;
 	auto vec = new std::vector<std::unique_ptr<DiskBlock>>();
-	int size_elem = cb->size_per_elem;
+	int size_elem = cb->opts.size_per_elem;
 	for(int i = 0; i < NUM_PROCESSES; i++){
 		std::string db_serialized = bytes_to_string(cb->buffer + size_elem * i);
 		DiskBlock * db = new DiskBlock();
@@ -557,7 +584,7 @@ static void read_full_event(void * arg1, void * arg2){
   it = namespaces.find(cb->disk);
 
 	int rc = spdk_nvme_ns_cmd_read(it->second->ns, it->second->qpair, cb->buffer,
-					 cb->LBA_INDEX, /* LBA start */
+					 cb->opts.LBA_INDEX, /* LBA start */
 					 NUM_PROCESSES, /* number of LBAs */
 					 read_full_complete, cb, 0);
 

@@ -37,12 +37,18 @@ link_directories (${SPDK_LIBS_LIBRARY_DIRS})
 
 add_executable(DiskPaxos
   src/main.cpp
-  src/DiskBlock.cpp
+  src/Disk/DiskBlock.cpp
   src/Command.cpp
   src/BankCommand.cpp
-  src/DiskAccess.cpp
-  src/disk_isomorphic_test.cpp
+  src/Disk/DiskAccess.cpp
+  src/Test/disk_isomorphic_test.cpp
+  src/message.pb.cc
+  src/Disk/DiskPaxos.cpp
 )
+
+##### PROTOCOL BUFFERS ########
+find_package(Protobuf REQUIRED)
+target_link_libraries(DiskPaxos ${Protobuf_LIBRARIES})
 
 add_definitions (${SPDK_LIBS_CFLAGS_OTHER})
 
@@ -99,19 +105,34 @@ target_link_libraries(DiskPaxos
   -ldl
 )
 
+#[[
 find_package(cppzmq)
 target_link_libraries(DiskPaxos cppzmq)
-
 add_definitions("-DZMQ_BUILD_DRAFT_API=1")
 
 add_executable(ReplicaPaxos
   src/Replica.cpp
 )
 
+target_include_directories (ReplicaPaxos PUBLIC include)
 target_link_libraries(ReplicaPaxos cppzmq)
+target_link_libraries(ReplicaPaxos ${Protobuf_LIBRARIES})
 
 add_executable(ServerPaxos
   src/Server.cpp
+  src/message.pb.cc
 )
 
+target_include_directories (ServerPaxos PUBLIC include)
 target_link_libraries(ServerPaxos cppzmq)
+target_link_libraries(ServerPaxos ${Protobuf_LIBRARIES})
+
+add_executable(ClientPaxos
+  src/Client.cpp
+  src/message.pb.cc
+)
+
+target_include_directories (ClientPaxos PUBLIC include)
+target_link_libraries(ClientPaxos cppzmq)
+target_link_libraries(ClientPaxos ${Protobuf_LIBRARIES})
+]]#

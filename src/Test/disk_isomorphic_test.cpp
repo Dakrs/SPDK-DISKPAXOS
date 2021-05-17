@@ -58,15 +58,43 @@ bool DiskTest::single_write_read_test(void){
   int row = rand() % this->k;
   int column = rand() % this->NUM_PROCESSES;
 
+  int index = row * this->NUM_PROCESSES + column;
+
   std::future<void> f1 = write("0000:03:00.0",db,row,column);
   f1.get();
 
-  std::future<std::unique_ptr<DiskBlock>> f3 = read("0000:03:00.0",row,column);
+  std::future<std::unique_ptr<DiskBlock>> f3 = read("0000:03:00.0",index);
   auto db2 = f3.get();
 
   bool res = db.input.compare(db2->input) == 0 && db.bal == db2->bal && db.mbal == db2->mbal && db.slot == db2->slot;
 
   return res;
+}
+
+bool DiskTest::single_write_read_test(int row,int column){
+  DiskBlock db = gen_random_block();
+
+  int index = row * this->NUM_PROCESSES + column;
+
+  std::future<void> f1 = write("0000:03:00.0",db,row,column);
+  f1.get();
+
+  std::future<std::unique_ptr<DiskBlock>> f3 = read("0000:03:00.0",index);
+  auto db2 = f3.get();
+
+  bool res = db.input.compare(db2->input) == 0 && db.bal == db2->bal && db.mbal == db2->mbal && db.slot == db2->slot;
+
+  return res;
+}
+
+void DiskTest::random_read(int max_row,int max_column){
+  int row = rand() % max_column;
+  int column = rand() % max_column;
+
+  int index = row * this->NUM_PROCESSES + column;
+
+  std::future<std::unique_ptr<DiskBlock>> f3 = read("0000:03:00.0",index);
+  auto db2 = f3.get();
 }
 
 int DiskTest::multi_write_read_test(int number_of_tests){
@@ -84,14 +112,30 @@ int DiskTest::multi_write_read_test(int number_of_tests){
   return k;
 }
 
+int DiskTest::multi_random_read_test(int number_of_tests){
+
+  int k = 0;
+
+  for (int i = 0; i < number_of_tests; i++) {
+    this->random_read(100000,100000);
+    k++;
+  }
+
+  return k;
+}
+
 void DiskTest::run_every_test(int number_of_tests){
 
-  std::cout << "Running multi random writes and reads" << std::endl;
   std::cout << "Current config: Value k = " << this->k << " N_PROCESSES = " << this->NUM_PROCESSES << " N_TESTS = " << number_of_tests << std::endl;
+  std::cout << "Running multi random writes and then reads" << std::endl;
 
   int res = this->multi_write_read_test(number_of_tests);
-
   std::cout << "Passed " << res << " of " << number_of_tests << " Tests" << std::endl;
+
+  std::cout << "Running multi random reads" << std::endl;
+  res = this->multi_random_read_test(number_of_tests);
+  std::cout << "Passed " << res << " of " << number_of_tests << " Tests" << std::endl;
+
 }
 
 DiskTest::~DiskTest(){

@@ -11,6 +11,8 @@
 #include <stdio.h>
 #include <vector>
 #include "Test/disk_isomorphic_test.hpp"
+#include "message.pb.h"
+#include "Disk/DiskPaxos.hpp"
 
 /**
 #### MULTIPLE REQUESTS ####
@@ -73,10 +75,81 @@ disktest.run_every_test(1000);
 
 */
 
+/**
+Message::Message sampleM;
+sampleM.set_messagetype(Message::Message::REQUEST);
+Message::RequestMessage * example1 = sampleM.mutable_req();
+example1->set_userid(2);
+example1->set_requestid(2);
+example1->set_query("Protobdasdasd");
+
+Message::RequestMessage example2 = sampleM.req();
+
+std::cout << "userId: " << example2.userid() << " requestId: " << example2.requestid() << " Query: " << example2.query() << std::endl;
+
+std::string s;
+sampleM.SerializeToString(&s);
+
+std::cout << "str: " << s << std::endl;
+
+Message::Message sampleB1;
+sampleB1.ParseFromString(s);
+
+Message::RequestMessage sampleB = sampleB1.req();
+
+std::cout << "userId: " << sampleB.userid() << " requestId: " << sampleB.requestid() << " Query: " << sampleB.query() << std::endl;
+
+*/
+
+/**
+####### TESTING ########
+DiskTest disktest(20,4); //lanes, n_processes
+disktest.run_every_test(1000);
+disktest.single_write_read_test(40,3);
+*/
 
 using namespace std;
 
 int main(int argc, char const *argv[]) {
+
+  /**
+  spdk_start(8,10); // 8 processos, 10 lanes
+  int pid = 7;
+
+  DiskPaxos * dp = new DiskPaxos("test",1,0,pid);
+  start_DiskPaxos(dp);
+
+  std::this_thread::sleep_for (std::chrono::seconds(5));
+  cout << dp->status << endl;
+
+
+  spdk_end();*/
+  /**
+  int res = spdk_library_start(8);
+
+  DiskBlock db2 = DiskBlock();
+  db2.input = "";
+  db2.bal = 0;
+  db2.mbal = 20;
+  db2.slot = 1;
+
+  std::future<void> f2 = write("0000:03:00.0",db2,1,4);
+  f2.get();
+
+  spdk_library_end();*/
+
+
+  spdk_start(8,10); // 8 processos, 10 lanes
+  int pid = 7;
+
+  DiskPaxos * dp = new DiskPaxos("test",1,0,pid);
+  start_DiskPaxos(dp);
+
+  std::this_thread::sleep_for (std::chrono::seconds(5));
+  cout << dp->status << endl;
+
+
+  spdk_end();
 
   return 0;
 }
