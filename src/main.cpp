@@ -131,33 +131,33 @@ int main(int argc, char const *argv[]) {
   spdk_start(N_PROCESSES,N_LANES); // 8 processos, 10 lanes
   int pid = 7;
 
-  /**
-  DiskPaxos * dp0 = new DiskPaxos("test0",0,pid);
+
+  DiskPaxos::DiskPaxos * dp0 = new DiskPaxos::DiskPaxos("test0",0,pid);
   start_DiskPaxos(dp0);
 
   std::this_thread::sleep_for (std::chrono::seconds(1));
 
-  DiskPaxos * dp1 = new DiskPaxos("test1",1,pid);
+  DiskPaxos::DiskPaxos * dp1 = new DiskPaxos::DiskPaxos("test1",1,pid);
   start_DiskPaxos(dp1);
 
   std::this_thread::sleep_for (std::chrono::seconds(1));
 
-  DiskPaxos * dp2 = new DiskPaxos("test2",2,pid);
+  DiskPaxos::DiskPaxos * dp2 = new DiskPaxos::DiskPaxos("test2",2,pid);
   start_DiskPaxos(dp2);
 
   std::this_thread::sleep_for (std::chrono::seconds(1));
 
-  DiskPaxos * dp3 = new DiskPaxos("test3",3,pid);
+  DiskPaxos::DiskPaxos * dp3 = new DiskPaxos::DiskPaxos("test3",3,pid);
   start_DiskPaxos(dp3);
 
   std::this_thread::sleep_for (std::chrono::seconds(1));
 
-  DiskPaxos * dp4 = new DiskPaxos("test4",4,pid);
+  DiskPaxos::DiskPaxos * dp4 = new DiskPaxos::DiskPaxos("test4",4,pid);
   start_DiskPaxos(dp4);
 
   std::this_thread::sleep_for (std::chrono::seconds(1));
 
-  DiskPaxos * dp5 = new DiskPaxos("test5",5,pid);
+  DiskPaxos::DiskPaxos * dp5 = new DiskPaxos::DiskPaxos("test5",5,pid);
   start_DiskPaxos(dp5);
 
   std::this_thread::sleep_for (std::chrono::seconds(10));
@@ -168,8 +168,7 @@ int main(int argc, char const *argv[]) {
   cout << "consensus id: 4 status: " << dp4->status << " finished: " << dp4->finished << endl;
   cout << "consensus id: 5 status: " << dp5->status << " finished: " << dp5->finished << endl;
 
-  propose(pid,0,"opttest");
-  std::this_thread::sleep_for (std::chrono::seconds(2));*/
+  /**
   propose(pid,0,"opttest");
   propose(5,0,"opttest_fst");
   propose(pid,1,"opttest_snd");
@@ -181,7 +180,7 @@ int main(int argc, char const *argv[]) {
   for (auto & [key, val] : (*res))
   {
     std::cout << "KEY: " << key << " val: " << val.toString()  << '\n';
-  }
+  }*/
 
   spdk_end();
 

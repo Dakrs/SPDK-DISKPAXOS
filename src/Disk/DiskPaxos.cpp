@@ -29,10 +29,6 @@ using namespace std;
 
 #define PROPOSAL_OFFSET 5000000
 
-namespace DiskPaxosNS {
-	typedef unsigned char byte;
-} /*  */
-
 static int NUM_PROCESSES = 0;
 static int NUM_CONCENSOS_LANES = 0;
 static uint32_t NEXT_CORE = 0;
@@ -90,17 +86,22 @@ struct DiskOperation {
 	string disk_id; //disk id
 	int tick; //
 	size_t size_elem;
-	DiskPaxosNS::byte * buffer;
+	DiskPaxos::byte * buffer;
 	int status;
 	uint32_t target_core;
-	DiskPaxos * dp;
+	DiskPaxos::DiskPaxos * dp;
 
-	DiskOperation(string d_id,int t,DiskPaxos * pointer,uint32_t target_core): disk_id(d_id), tick(t){
+	DiskOperation(string d_id,int t,DiskPaxos::DiskPaxos * pointer,uint32_t target_core): disk_id(d_id), tick(t){
 		status = 0;
 		dp = pointer;
 		this->target_core = target_core;
 	};
-	DiskOperation(string d_id,int t,size_t size_per_elem,DiskPaxos * pointer,uint32_t target_core): disk_id(d_id), tick(t), size_elem(size_per_elem){
+
+	/**
+	Constructor used to read a line of blocks
+	*/
+
+	DiskOperation(string d_id,int t,size_t size_per_elem,DiskPaxos::DiskPaxos * pointer,uint32_t target_core): disk_id(d_id), tick(t), size_elem(size_per_elem){
 		status = 0;
 		dp = pointer;
 		this->target_core = target_core;
@@ -123,8 +124,12 @@ struct Proposal {
 	~Proposal(){};
 };
 
+/**
+Master Object to perform a read on a set of proposals
+*/
+
 struct LeaderRead {
-	map<int,DiskBlock> proposals;
+	map<int,DiskBlock> proposals; //current map of each proposal found
 	int starting_slot; //current value for K in the leader
 	int number_of_slots; //number of K to check in advance
 	set<string> disksSeen;
@@ -141,16 +146,22 @@ struct LeaderRead {
 		this->n_events = 0;
 		this->status = 0;
 	};
-	~LeaderRead(){};
+	~LeaderRead(){
+		cout << "Cleaded" << endl;
+	};
 };
 
+/**
+Object to control a read from a single disk for a leader's read on replicas's proposals
+*/
+
 struct LeaderReadOpt {
-	string disk_id;
-	size_t size_elem;
-	int status;
-	uint32_t target_core;
-	DiskPaxosNS::byte * buffer;
-	LeaderRead * ld;
+	string disk_id; //identifier of a disk
+	size_t size_elem; //block size supported
+	int status; //current status, 0 running, 1 finished
+	uint32_t target_core; // allocated core
+	DiskPaxos::byte * buffer; //buffer used for the opt
+	LeaderRead * ld; //master object for read
 
 	LeaderReadOpt(
 		string disk_id,
@@ -257,7 +268,7 @@ Function to write a encode byte block into a buffer;
 the first 4 bytes keep the size of the block.
 */
 
-static void string_to_bytes(std::string str, DiskPaxosNS::byte * buffer){
+static void string_to_bytes(std::string str, DiskPaxos::byte * buffer){
 	int size = str.length();
 	//é preciso dar throw a um erro caso o tamanho da string seja superior ao tamanho dos blocos.
 
@@ -273,7 +284,7 @@ static void string_to_bytes(std::string str, DiskPaxosNS::byte * buffer){
 Function to read a byte buffer and return the byte string it contains.
 */
 
-static std::string bytes_to_string(DiskPaxosNS::byte * buffer){
+static std::string bytes_to_string(DiskPaxos::byte * buffer){
 	int size = int((unsigned char)(buffer[0]) |
             (unsigned char)(buffer[1]) << 8 |
             (unsigned char)(buffer[2]) << 16 |
@@ -336,7 +347,7 @@ void spdk_end() {
 	internal_spdk_event_launcher.join();
 }
 
-DiskPaxos::DiskPaxos(string input, int slot, int pid){
+DiskPaxos::DiskPaxos::DiskPaxos(string input, int slot, int pid){
   this->input = input;
   this->tick = 0;
   this->phase = 0;
@@ -355,12 +366,12 @@ DiskPaxos::DiskPaxos(string input, int slot, int pid){
 }
 
 static void spawn_disk_paxos(void * arg1,void * arg2){
-	DiskPaxos * dp = (DiskPaxos *) arg1;
+	DiskPaxos::DiskPaxos * dp = (DiskPaxos::DiskPaxos *) arg1;
 	cout << "Starting consensus for slot: " << dp->slot << " on core: " << dp->target_core << endl;
 	dp->startBallot();
 }
 
-void start_DiskPaxos(DiskPaxos * dp){
+void start_DiskPaxos(DiskPaxos::DiskPaxos * dp){
 	dp->target_core = NEXT_CORE;
 	NEXT_CORE = spdk_env_get_next_core(NEXT_CORE);
 	if (NEXT_CORE == UINT32_MAX){
@@ -371,7 +382,7 @@ void start_DiskPaxos(DiskPaxos * dp){
 	spdk_event_call(e);
 }
 
-void DiskPaxos::initPhase(){
+void DiskPaxos::DiskPaxos::initPhase(){
 	this->disksSeen.clear();
 	this->blocksSeen.clear();
 
@@ -379,7 +390,7 @@ void DiskPaxos::initPhase(){
 	this->blocksSeen.push_back(unique_ptr<DiskBlock>(db));
 }
 
-void DiskPaxos::startBallot(){
+void DiskPaxos::DiskPaxos::startBallot(){
 	cout << "Started a new Ballot" << endl;
 	this->tick++;
 	this->phase = 1;
@@ -389,14 +400,14 @@ void DiskPaxos::startBallot(){
 	this->ReadAndWrite();
 }
 
-void DiskPaxos::phase2(){
+void DiskPaxos::DiskPaxos::phase2(){
 	cout << "Began phase " << this->phase << " N_E: " << this->n_events << endl;
 	this->phase = 2;
 	this->initPhase();
 	this->ReadAndWrite();
 }
 
-void DiskPaxos::endPhase(){
+void DiskPaxos::DiskPaxos::endPhase(){
 	this->tick++;
 	cout << "Completed phase " << this->phase << " N_E: " << this->n_events << endl;
 
@@ -460,7 +471,7 @@ static void read_complete(void *arg,const struct spdk_nvme_cpl *completion){
 		exit(1);
 	}
 
-	DiskPaxos * dp = dO->dp;
+	DiskPaxos::DiskPaxos * dp = dO->dp;
 
 	dp->n_events--;
 	if (dO->tick == dp->tick){
@@ -511,7 +522,7 @@ static void read_complete(void *arg,const struct spdk_nvme_cpl *completion){
 	dO->status = 1;
 }
 
-static void read_full_line(string disk_id,int tick,DiskPaxos * dp){
+static void read_full_line(string disk_id,int tick,DiskPaxos::DiskPaxos * dp){
 	map<string,unique_ptr<NVME_NAMESPACE_MULTITHREAD>>::iterator it;
 	map<uint32_t,struct spdk_nvme_qpair	*>::iterator it_qpair;
 
@@ -521,7 +532,7 @@ static void read_full_line(string disk_id,int tick,DiskPaxos * dp){
 	size_t BUFFER_SIZE = (it->second->info.lbaf + it->second->info.metadata_size);
 
 	DiskOperation * dO = new DiskOperation(disk_id,tick,BUFFER_SIZE,dp,dp->target_core); // read data object
-	dO->buffer = (DiskPaxosNS::byte *) spdk_zmalloc(BUFFER_SIZE * NUM_PROCESSES, 0x1000, NULL, SPDK_ENV_SOCKET_ID_ANY, SPDK_MALLOC_DMA);
+	dO->buffer = (DiskPaxos::byte *) spdk_zmalloc(BUFFER_SIZE * NUM_PROCESSES, 0x1000, NULL, SPDK_ENV_SOCKET_ID_ANY, SPDK_MALLOC_DMA);
 
 	int rc = spdk_nvme_ns_cmd_read(it->second->ns, it_qpair->second , dO->buffer,
 						LBA_INDEX, /* LBA start */
@@ -557,7 +568,7 @@ static void write_complete(void *arg,const struct spdk_nvme_cpl *completion){
 	dO->status = 1;
 }
 
-void DiskPaxos::ReadAndWrite(){
+void DiskPaxos::DiskPaxos::ReadAndWrite(){
 	cout << "Started ReadAndWrite Phase: " << this->phase << endl;
 	string local_db_serialized = this->local_block->serialize();
 	map<string,unique_ptr<NVME_NAMESPACE_MULTITHREAD>>::iterator it;
@@ -571,7 +582,7 @@ void DiskPaxos::ReadAndWrite(){
 
 			size_t BUFFER_SIZE = (it->second->info.lbaf + it->second->info.metadata_size);
 			DiskOperation * dO = new DiskOperation(disk_id,this->tick,this,this->target_core);
-			dO->buffer = (DiskPaxosNS::byte *) spdk_zmalloc(BUFFER_SIZE, 0x1000, NULL, SPDK_ENV_SOCKET_ID_ANY, SPDK_MALLOC_DMA);
+			dO->buffer = (byte *) spdk_zmalloc(BUFFER_SIZE, 0x1000, NULL, SPDK_ENV_SOCKET_ID_ANY, SPDK_MALLOC_DMA);
 			string_to_bytes(local_db_serialized,dO->buffer);
 
 			it_qpair = it->second->qpairs.find(this->target_core);
@@ -594,7 +605,7 @@ void DiskPaxos::ReadAndWrite(){
 }
 
 static void cleanup(void * arg1, void * arg2){
-	DiskPaxos * dp = (DiskPaxos *) arg1;
+	DiskPaxos::DiskPaxos * dp = (DiskPaxos::DiskPaxos *) arg1;
 
 	if (dp->n_events > 0){
 		//there are still events running
@@ -608,7 +619,7 @@ static void cleanup(void * arg1, void * arg2){
 	}
 }
 
-void DiskPaxos::Cancel(){
+void DiskPaxos::DiskPaxos::Cancel(){
 	this->tick++;
 	this->status = 2;
 
@@ -618,7 +629,7 @@ void DiskPaxos::Cancel(){
 	spdk_event_call(e);
 }
 
-void DiskPaxos::Abort(int mbal){
+void DiskPaxos::DiskPaxos::Abort(int mbal){
 	int pid_responsible = mbal % NUM_PROCESSES;
 	cout << "Abort" << endl;
 	if (pid_responsible < this->pid){ // ainda posso ser leader
@@ -646,7 +657,7 @@ static void write_commit_complete(void *arg,const struct spdk_nvme_cpl *completi
 	dO->dp->n_events--;
 	dO->status = 1;
 
-	DiskPaxos * dp = dO->dp;
+	DiskPaxos::DiskPaxos * dp = dO->dp;
 
 	dp->disksSeen.insert(dO->disk_id);
 	if (dp->disksSeen.size() > (addresses.size() / 2) && dp->status == 0){
@@ -657,7 +668,7 @@ static void write_commit_complete(void *arg,const struct spdk_nvme_cpl *completi
 	}
 }
 
-void DiskPaxos::Commit(){
+void DiskPaxos::DiskPaxos::Commit(){
 	cout << "Consensus archived: " << this->local_block->input << endl;
 
 	string local_db_serialized = this->local_block->serialize();
@@ -674,7 +685,7 @@ void DiskPaxos::Commit(){
 
 			size_t BUFFER_SIZE = (it->second->info.lbaf + it->second->info.metadata_size);
 			DiskOperation * dO = new DiskOperation(disk_id,this->tick,this,this->target_core);
-			dO->buffer = (DiskPaxosNS::byte *) spdk_zmalloc(BUFFER_SIZE, 0x1000, NULL, SPDK_ENV_SOCKET_ID_ANY, SPDK_MALLOC_DMA);
+			dO->buffer = (byte *) spdk_zmalloc(BUFFER_SIZE, 0x1000, NULL, SPDK_ENV_SOCKET_ID_ANY, SPDK_MALLOC_DMA);
 			string_to_bytes(local_db_serialized,dO->buffer);
 
 			it_qpair = it->second->qpairs.find(this->target_core);
@@ -730,7 +741,7 @@ static void internal_proposal(void * arg1, void * arg2){
 
 			size_t BUFFER_SIZE = (it->second->info.lbaf + it->second->info.metadata_size);
 			DiskOperation * dO = new DiskOperation(disk_id,props->target_core);
-			dO->buffer = (DiskPaxosNS::byte *) spdk_zmalloc(BUFFER_SIZE, 0x1000, NULL, SPDK_ENV_SOCKET_ID_ANY, SPDK_MALLOC_DMA);
+			dO->buffer = (DiskPaxos::byte *) spdk_zmalloc(BUFFER_SIZE, 0x1000, NULL, SPDK_ENV_SOCKET_ID_ANY, SPDK_MALLOC_DMA);
 			string_to_bytes(local_db_serialized,dO->buffer);
 
 			it_qpair = it->second->qpairs.find(props->target_core);
@@ -867,7 +878,7 @@ static void read_list_proposals(void * arg1,void * arg2){
 			size_t BUFFER_SIZE = (it->second->info.lbaf + it->second->info.metadata_size);
 			LeaderReadOpt * ld_opt = new LeaderReadOpt(disk_id,BUFFER_SIZE,ld->target_core,ld);
 
-			ld_opt->buffer = (DiskPaxosNS::byte *) spdk_zmalloc(BUFFER_SIZE * ld->number_of_slots * NUM_PROCESSES, 0x1000, NULL, SPDK_ENV_SOCKET_ID_ANY, SPDK_MALLOC_DMA);
+			ld_opt->buffer = (DiskPaxos::byte *) spdk_zmalloc(BUFFER_SIZE * ld->number_of_slots * NUM_PROCESSES, 0x1000, NULL, SPDK_ENV_SOCKET_ID_ANY, SPDK_MALLOC_DMA);
 			it_qpair = it->second->qpairs.find(ld_opt->target_core);
 
 			int rc = spdk_nvme_ns_cmd_read(it->second->ns, it_qpair->second , ld_opt->buffer,
