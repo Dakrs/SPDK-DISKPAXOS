@@ -47,7 +47,7 @@ DiskTest::DiskTest(int k, int n_p){
   this->k = k;
   this->NUM_PROCESSES = n_p;
 
-  std::future<void> f1 = initialize("0000:03:00.0",this->k);
+  std::future<void> f1 = initialize("0000:03:00.0",this->k * this->NUM_PROCESSES,0);
 	f1.get();
 	std::cout << "initialize blocks completed" << std::endl;
 }

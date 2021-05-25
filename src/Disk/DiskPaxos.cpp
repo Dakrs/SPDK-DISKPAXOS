@@ -23,12 +23,20 @@ extern "C" {
 #include <thread>
 #include <atomic>
 #include <algorithm>
+#include <future>
 
 using namespace std;
 
-typedef unsigned char byte;
+#define PROPOSAL_OFFSET 5000000
+
+namespace DiskPaxosNS {
+	typedef unsigned char byte;
+} /*  */
+
 static int NUM_PROCESSES = 0;
 static int NUM_CONCENSOS_LANES = 0;
+static uint32_t NEXT_CORE = 0;
+static uint32_t NEXT_CORE_REPLICA = 0;
 
 /**
 Struct used to keep track of all controllers found.
@@ -79,10 +87,10 @@ struct NVME_NAMESPACE_MULTITHREAD {
 };
 
 struct DiskOperation {
-	string disk_id;
-	int tick;
+	string disk_id; //disk id
+	int tick; //
 	size_t size_elem;
-	byte * buffer;
+	DiskPaxosNS::byte * buffer;
 	int status;
 	uint32_t target_core;
 	DiskPaxos * dp;
@@ -97,14 +105,69 @@ struct DiskOperation {
 		dp = pointer;
 		this->target_core = target_core;
 	};
+	DiskOperation(string d_id,uint32_t target_core): disk_id(d_id){
+		status = 0;
+		dp = NULL;
+		this->target_core = target_core;
+	};
 	~DiskOperation(){};
 };
 
+struct Proposal {
+	int pid;
+	int slot;
+	string command;
+	uint32_t target_core;
+
+	Proposal(int pid,int slot, string command, uint32_t target_core): pid(pid), slot(slot), command(command), target_core(target_core) {};
+	~Proposal(){};
+};
+
+struct LeaderRead {
+	map<int,DiskBlock> proposals;
+	int starting_slot; //current value for K in the leader
+	int number_of_slots; //number of K to check in advance
+	set<string> disksSeen;
+	int n_events;
+	int status; //0 running, 1 ended;
+	promise< unique_ptr<map<int,DiskBlock >> > callback;
+	uint32_t target_core;
+
+	LeaderRead(
+		int slot,
+		int n_slots,
+		uint32_t target_core
+	): starting_slot(slot), number_of_slots(n_slots), target_core(target_core){
+		this->n_events = 0;
+		this->status = 0;
+	};
+	~LeaderRead(){};
+};
+
+struct LeaderReadOpt {
+	string disk_id;
+	size_t size_elem;
+	int status;
+	uint32_t target_core;
+	DiskPaxosNS::byte * buffer;
+	LeaderRead * ld;
+
+	LeaderReadOpt(
+		string disk_id,
+		size_t size_e,
+		uint32_t target_core,
+		LeaderRead * ld_p
+	): disk_id(disk_id), size_elem(size_e),target_core(target_core), ld(ld_p){
+		this->status = 0;
+	};
+	~LeaderReadOpt(){};
+};
+
 static set<string> addresses; //set a string identifying every disk
-static vector<unique_ptr<NVME_CONTROLER_V2>> controllers;
-static map<string,unique_ptr<NVME_NAMESPACE_MULTITHREAD>> namespaces;
-static atomic<bool> ready (false);
-static thread internal_spdk_event_launcher;
+static vector<unique_ptr<NVME_CONTROLER_V2>> controllers; //vector with all controller structures allocated
+static map<string,unique_ptr<NVME_NAMESPACE_MULTITHREAD>> namespaces; // map of disk id to working namespace
+static atomic<bool> ready (false); //flag to make sure spdk libray has started
+static thread internal_spdk_event_launcher; //internal thread to coordinate spdk.
 
 static bool probe_cb(void *cb_ctx,const struct spdk_nvme_transport_id *trid,struct spdk_nvme_ctrlr_opts *opts){
   std::string addr(trid->traddr);
@@ -194,7 +257,7 @@ Function to write a encode byte block into a buffer;
 the first 4 bytes keep the size of the block.
 */
 
-static void string_to_bytes(std::string str, byte * buffer){
+static void string_to_bytes(std::string str, DiskPaxosNS::byte * buffer){
 	int size = str.length();
 	//é preciso dar throw a um erro caso o tamanho da string seja superior ao tamanho dos blocos.
 
@@ -210,7 +273,7 @@ static void string_to_bytes(std::string str, byte * buffer){
 Function to read a byte buffer and return the byte string it contains.
 */
 
-static std::string bytes_to_string(byte * buffer){
+static std::string bytes_to_string(DiskPaxosNS::byte * buffer){
 	int size = int((unsigned char)(buffer[0]) |
             (unsigned char)(buffer[1]) << 8 |
             (unsigned char)(buffer[2]) << 16 |
@@ -224,18 +287,15 @@ static std::string bytes_to_string(byte * buffer){
 }
 
 static void app_init(void * arg){
-	/**
-	if (spdk_vmd_init()) {
-		fprintf(stderr, "Failed to initialize VMD."
-			" Some NVMe devices can be unavailable.\n");
-	}*/
-
 	int rc = spdk_nvme_probe(NULL, NULL, probe_cb, attach_cb, NULL);
 	if (rc != 0) {
 		fprintf(stderr, "spdk_nvme_probe() failed\n");
 		cleanup();
 		exit(-1);
 	}
+
+	NEXT_CORE = spdk_env_get_first_core();
+	NEXT_CORE_REPLICA = spdk_env_get_first_core();
 
 	ready = true;
 
@@ -276,7 +336,7 @@ void spdk_end() {
 	internal_spdk_event_launcher.join();
 }
 
-DiskPaxos::DiskPaxos(string input, int slot, uint32_t target_core, int pid){
+DiskPaxos::DiskPaxos(string input, int slot, int pid){
   this->input = input;
   this->tick = 0;
   this->phase = 0;
@@ -285,21 +345,28 @@ DiskPaxos::DiskPaxos(string input, int slot, uint32_t target_core, int pid){
   this->pid = pid;
 	this->nextBallot = pid;
 	this->n_events = 0;
+	this->finished = 0;
 
   DiskBlock * db = new DiskBlock();
 	db->slot = slot;
   this->local_block = std::unique_ptr<DiskBlock>(db);
 
-  this->target_core = target_core;
+  this->target_core = 0;
 }
 
 static void spawn_disk_paxos(void * arg1,void * arg2){
 	DiskPaxos * dp = (DiskPaxos *) arg1;
-
+	cout << "Starting consensus for slot: " << dp->slot << " on core: " << dp->target_core << endl;
 	dp->startBallot();
 }
 
 void start_DiskPaxos(DiskPaxos * dp){
+	dp->target_core = NEXT_CORE;
+	NEXT_CORE = spdk_env_get_next_core(NEXT_CORE);
+	if (NEXT_CORE == UINT32_MAX){
+		NEXT_CORE = spdk_env_get_first_core();
+	}
+
 	struct spdk_event * e = spdk_event_allocate(dp->target_core,spawn_disk_paxos,dp,NULL);
 	spdk_event_call(e);
 }
@@ -359,10 +426,8 @@ void DiskPaxos::endPhase(){
 		this->phase2();
 	}
 	else{
-		this->status = 1;
-		cout << "Consensus archived: " << this->local_block->input << endl;
+		this->Commit();
 	}
-
 }
 
 static void verify_event(void * arg1, void * arg2){
@@ -456,7 +521,7 @@ static void read_full_line(string disk_id,int tick,DiskPaxos * dp){
 	size_t BUFFER_SIZE = (it->second->info.lbaf + it->second->info.metadata_size);
 
 	DiskOperation * dO = new DiskOperation(disk_id,tick,BUFFER_SIZE,dp,dp->target_core); // read data object
-	dO->buffer = (byte *) spdk_zmalloc(BUFFER_SIZE * NUM_PROCESSES, 0x1000, NULL, SPDK_ENV_SOCKET_ID_ANY, SPDK_MALLOC_DMA);
+	dO->buffer = (DiskPaxosNS::byte *) spdk_zmalloc(BUFFER_SIZE * NUM_PROCESSES, 0x1000, NULL, SPDK_ENV_SOCKET_ID_ANY, SPDK_MALLOC_DMA);
 
 	int rc = spdk_nvme_ns_cmd_read(it->second->ns, it_qpair->second , dO->buffer,
 						LBA_INDEX, /* LBA start */
@@ -506,7 +571,7 @@ void DiskPaxos::ReadAndWrite(){
 
 			size_t BUFFER_SIZE = (it->second->info.lbaf + it->second->info.metadata_size);
 			DiskOperation * dO = new DiskOperation(disk_id,this->tick,this,this->target_core);
-			dO->buffer = (byte *) spdk_zmalloc(BUFFER_SIZE, 0x1000, NULL, SPDK_ENV_SOCKET_ID_ANY, SPDK_MALLOC_DMA);
+			dO->buffer = (DiskPaxosNS::byte *) spdk_zmalloc(BUFFER_SIZE, 0x1000, NULL, SPDK_ENV_SOCKET_ID_ANY, SPDK_MALLOC_DMA);
 			string_to_bytes(local_db_serialized,dO->buffer);
 
 			it_qpair = it->second->qpairs.find(this->target_core);
@@ -514,7 +579,7 @@ void DiskPaxos::ReadAndWrite(){
 			int rc = spdk_nvme_ns_cmd_write(it->second->ns, it_qpair->second , dO->buffer,
 								LBA_INDEX, /* LBA start */
 								1, /* number of LBAs */
-								write_complete, dO, SPDK_NVME_IO_FLAGS_FORCE_UNIT_ACCESS); //submit a write operation to NVME
+								write_complete, dO, 0); //submit a write operation to NVME
 
 			if (rc != 0) {
 					fprintf(stderr, "starting write I/O failed\n");
@@ -538,16 +603,17 @@ static void cleanup(void * arg1, void * arg2){
 		spdk_event_call(e);
 	}
 	else{
-		dp->status = 2;
-		cout << "Consensus cancelled" << endl;
+		dp->finished = 1;
+		cout << "Consensus finished" << endl;
 	}
 }
 
 void DiskPaxos::Cancel(){
 	this->tick++;
-	//this->status = 2;
+	this->status = 2;
 
 	//spawn event de cleanup
+	this->finished = 2;
 	struct spdk_event * e = spdk_event_allocate(this->target_core,cleanup,this,NULL);
 	spdk_event_call(e);
 }
@@ -563,4 +629,277 @@ void DiskPaxos::Abort(int mbal){
 		cout << "No longer running for leadership" << endl;
 		this->Cancel();
 	}
+}
+
+static void write_commit_complete(void *arg,const struct spdk_nvme_cpl *completion){
+	DiskOperation * dO = (DiskOperation *) arg;
+
+	if (spdk_nvme_cpl_is_error(completion)) {
+		fprintf(stderr, "I/O error status: %s\n", spdk_nvme_cpl_get_status_string(&completion->status));
+		fprintf(stderr, "Write I/O failed, aborting run\n");
+		dO->status = 2;
+		exit(1);
+	}
+
+	spdk_free(dO->buffer);
+	cout << "Commit on: " << dO->disk_id << " started" << endl;
+	dO->dp->n_events--;
+	dO->status = 1;
+
+	DiskPaxos * dp = dO->dp;
+
+	dp->disksSeen.insert(dO->disk_id);
+	if (dp->disksSeen.size() > (addresses.size() / 2) && dp->status == 0){
+		dp->status = 1;
+		dp->finished = 2;
+		struct spdk_event * e = spdk_event_allocate(dp->target_core,cleanup,dp,NULL);
+		spdk_event_call(e);
+	}
+}
+
+void DiskPaxos::Commit(){
+	cout << "Consensus archived: " << this->local_block->input << endl;
+
+	string local_db_serialized = this->local_block->serialize();
+	map<string,unique_ptr<NVME_NAMESPACE_MULTITHREAD>>::iterator it;
+	int LBA_INDEX = NUM_CONCENSOS_LANES * NUM_PROCESSES + this->slot;
+
+	map<uint32_t,struct spdk_nvme_qpair	*>::iterator it_qpair;
+	this->disksSeen.clear();
+
+	for(auto disk_id: addresses){
+		it = namespaces.find(disk_id);
+
+		if (it != namespaces.end()){
+
+			size_t BUFFER_SIZE = (it->second->info.lbaf + it->second->info.metadata_size);
+			DiskOperation * dO = new DiskOperation(disk_id,this->tick,this,this->target_core);
+			dO->buffer = (DiskPaxosNS::byte *) spdk_zmalloc(BUFFER_SIZE, 0x1000, NULL, SPDK_ENV_SOCKET_ID_ANY, SPDK_MALLOC_DMA);
+			string_to_bytes(local_db_serialized,dO->buffer);
+
+			it_qpair = it->second->qpairs.find(this->target_core);
+
+			int rc = spdk_nvme_ns_cmd_write(it->second->ns, it_qpair->second , dO->buffer,
+								LBA_INDEX, /* LBA start */
+								1, /* number of LBAs */
+								write_commit_complete, dO, 0); //submit a write operation to NVME
+
+			if (rc != 0) {
+					fprintf(stderr, "starting write I/O failed\n");
+					exit(1);
+			}
+
+			this->n_events++;
+			struct spdk_event * e = spdk_event_allocate(this->target_core,verify_event,dO,NULL);
+			spdk_event_call(e);
+		}
+	}
+}
+
+static void simple_write_complete(void *arg,const struct spdk_nvme_cpl *completion){
+	DiskOperation * dO = (DiskOperation *) arg;
+
+	if (spdk_nvme_cpl_is_error(completion)) {
+		fprintf(stderr, "I/O error status: %s\n", spdk_nvme_cpl_get_status_string(&completion->status));
+		fprintf(stderr, "Write I/O failed, aborting run\n");
+		dO->status = 2;
+		exit(1);
+	}
+
+	spdk_free(dO->buffer);
+	dO->status = 1;
+}
+
+static void internal_proposal(void * arg1, void * arg2){
+	Proposal * props = (Proposal *) arg1;
+
+	DiskBlock db;
+	db.slot = props->slot;
+	db.input = props->command;
+
+	string local_db_serialized = db.serialize();
+
+	map<string,unique_ptr<NVME_NAMESPACE_MULTITHREAD>>::iterator it;
+	map<uint32_t,struct spdk_nvme_qpair	*>::iterator it_qpair;
+	int LBA_INDEX = NUM_CONCENSOS_LANES * NUM_PROCESSES + PROPOSAL_OFFSET + db.slot * NUM_PROCESSES + props->pid;
+
+	for(auto disk_id: addresses){
+		it = namespaces.find(disk_id);
+
+		if (it != namespaces.end()){
+
+			size_t BUFFER_SIZE = (it->second->info.lbaf + it->second->info.metadata_size);
+			DiskOperation * dO = new DiskOperation(disk_id,props->target_core);
+			dO->buffer = (DiskPaxosNS::byte *) spdk_zmalloc(BUFFER_SIZE, 0x1000, NULL, SPDK_ENV_SOCKET_ID_ANY, SPDK_MALLOC_DMA);
+			string_to_bytes(local_db_serialized,dO->buffer);
+
+			it_qpair = it->second->qpairs.find(props->target_core);
+
+			int rc = spdk_nvme_ns_cmd_write(it->second->ns, it_qpair->second , dO->buffer,
+								LBA_INDEX, /* LBA start */
+								1, /* number of LBAs */
+								simple_write_complete, dO, SPDK_NVME_IO_FLAGS_FORCE_UNIT_ACCESS); //submit a write operation to NVME
+
+			if (rc != 0) {
+					fprintf(stderr, "starting write I/O failed\n");
+					exit(1);
+			}
+
+			struct spdk_event * e = spdk_event_allocate(dO->target_core,verify_event,dO,NULL);
+			spdk_event_call(e);
+		}
+	}
+
+	delete props;
+}
+
+void propose(int pid, int slot,string command){
+	Proposal * p = new Proposal(pid,slot,command,NEXT_CORE_REPLICA);
+	NEXT_CORE_REPLICA = spdk_env_get_next_core(NEXT_CORE_REPLICA);
+	if (NEXT_CORE_REPLICA == UINT32_MAX){
+		NEXT_CORE_REPLICA = spdk_env_get_first_core();
+	}
+
+	struct spdk_event * e = spdk_event_allocate(NEXT_CORE_REPLICA,internal_proposal,p,NULL);
+	spdk_event_call(e);
+}
+
+static void verify_event_leader(void * arg1, void * arg2){
+	LeaderReadOpt * dO = (LeaderReadOpt *) arg1;
+
+	map<string,unique_ptr<NVME_NAMESPACE_MULTITHREAD>>::iterator it;
+	it = namespaces.find(dO->disk_id);
+
+	if (!dO->status){
+		map<uint32_t,struct spdk_nvme_qpair	*>::iterator it_qpair;
+		it_qpair = it->second->qpairs.find(dO->target_core);
+
+		spdk_nvme_qpair_process_completions(it_qpair->second, 0);
+
+		struct spdk_event * e = spdk_event_allocate(dO->target_core,verify_event_leader,dO,NULL);
+		spdk_event_call(e);
+	}
+	else{
+		delete dO;
+	}
+}
+
+static void LeaderRead_cleanup(void * arg1, void * arg2){
+	LeaderRead * ld = (LeaderRead * ) arg1;
+
+	if (ld->n_events > 0){
+		struct spdk_event * e = spdk_event_allocate(ld->target_core,LeaderRead_cleanup,ld,NULL);
+		spdk_event_call(e);
+	}
+	else{
+		delete ld;
+	}
+}
+
+static void leader_read_completion(void *arg,const struct spdk_nvme_cpl *completion){
+	LeaderReadOpt * ld_opt = (LeaderReadOpt *) arg;
+
+	if (spdk_nvme_cpl_is_error(completion)) {
+		fprintf(stderr, "I/O error status: %s\n", spdk_nvme_cpl_get_status_string(&completion->status));
+		fprintf(stderr, "Write I/O failed, aborting run\n");
+		ld_opt->status = 2;
+		exit(1);
+	}
+
+	LeaderRead * ld = ld_opt->ld;
+
+	if (ld->status){ //already ended the read from a majority of disks
+		ld->n_events--;
+		spdk_free(ld_opt->buffer);
+		ld_opt->status = 1;
+		return;
+	}
+
+	map<int,DiskBlock>::iterator it;
+
+	for(int i = 0; i < ld->number_of_slots; i++){
+		it = ld->proposals.find(i + ld->starting_slot);
+		if (it == ld->proposals.end()){ //if the current slot doesn't have a command
+			for (int j = 0; j < NUM_PROCESSES; j++) {
+				string db_serialized = bytes_to_string(ld_opt->buffer + ld_opt->size_elem * (i * NUM_PROCESSES + j)); //buffer to string
+				DiskBlock db;
+				db.deserialize(db_serialized); //inverse of serialize
+
+				if (db.isValid()){
+					ld->proposals.insert(pair<int,DiskBlock>(i + ld->starting_slot,db));
+					break;
+				}
+			}
+		}
+	}
+	ld->disksSeen.insert(ld_opt->disk_id);
+
+
+	if (ld->disksSeen.size() > (addresses.size() / 2)){
+		ld->status = 1;
+		auto res = new map<int,DiskBlock>(ld->proposals);
+		ld->callback.set_value(unique_ptr<map<int,DiskBlock>>(res));
+
+		struct spdk_event * e = spdk_event_allocate(ld->target_core,LeaderRead_cleanup,ld,NULL);
+		spdk_event_call(e);
+	}
+	ld->n_events--;
+
+	spdk_free(ld_opt->buffer);
+	ld_opt->status = 1;
+
+	std::cout << "Read Proposal Completed" << '\n';
+}
+
+static void read_list_proposals(void * arg1,void * arg2){
+	LeaderRead * ld = (LeaderRead *) arg1;
+
+	map<string,unique_ptr<NVME_NAMESPACE_MULTITHREAD>>::iterator it;
+	map<uint32_t,struct spdk_nvme_qpair	*>::iterator it_qpair;
+
+	int LBA_INDEX = NUM_CONCENSOS_LANES * NUM_PROCESSES + PROPOSAL_OFFSET + ld->starting_slot * NUM_PROCESSES;
+
+	for(auto disk_id: addresses){
+		it = namespaces.find(disk_id);
+
+		if (it != namespaces.end()){
+
+			size_t BUFFER_SIZE = (it->second->info.lbaf + it->second->info.metadata_size);
+			LeaderReadOpt * ld_opt = new LeaderReadOpt(disk_id,BUFFER_SIZE,ld->target_core,ld);
+
+			ld_opt->buffer = (DiskPaxosNS::byte *) spdk_zmalloc(BUFFER_SIZE * ld->number_of_slots * NUM_PROCESSES, 0x1000, NULL, SPDK_ENV_SOCKET_ID_ANY, SPDK_MALLOC_DMA);
+			it_qpair = it->second->qpairs.find(ld_opt->target_core);
+
+			int rc = spdk_nvme_ns_cmd_read(it->second->ns, it_qpair->second , ld_opt->buffer,
+								LBA_INDEX,
+								NUM_PROCESSES*ld->number_of_slots,
+								leader_read_completion, ld_opt,0);
+
+			if (rc != 0) {
+					fprintf(stderr, "starting write I/O failed\n");
+					exit(1);
+			}
+
+			ld->n_events++;
+			struct spdk_event * e = spdk_event_allocate(ld_opt->target_core,verify_event_leader,ld_opt,NULL);
+			spdk_event_call(e);
+		}
+	}
+
+}
+
+std::future<unique_ptr<map<int,DiskBlock>> > read_proposals(int k,int number_of_slots){
+	LeaderRead * ld = new LeaderRead(k,number_of_slots,NEXT_CORE);
+	NEXT_CORE = spdk_env_get_next_core(NEXT_CORE);
+	if (NEXT_CORE == UINT32_MAX){
+		NEXT_CORE = spdk_env_get_first_core();
+	}
+
+	ld->callback = promise<unique_ptr< map<int,DiskBlock> >>();
+	auto response = ld->callback.get_future();
+
+	struct spdk_event * e = spdk_event_allocate(ld->target_core,read_list_proposals,ld,NULL);
+	spdk_event_call(e);
+
+	return response;
 }

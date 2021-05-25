@@ -11,7 +11,6 @@
 #include <stdio.h>
 #include <vector>
 #include "Test/disk_isomorphic_test.hpp"
-#include "message.pb.h"
 #include "Disk/DiskPaxos.hpp"
 
 /**
@@ -111,22 +110,9 @@ disktest.single_write_read_test(40,3);
 using namespace std;
 
 int main(int argc, char const *argv[]) {
-
+  int N_PROCESSES = 8, N_LANES = 10;
   /**
-  spdk_start(8,10); // 8 processos, 10 lanes
-  int pid = 7;
-
-  DiskPaxos * dp = new DiskPaxos("test",1,0,pid);
-  start_DiskPaxos(dp);
-
-  std::this_thread::sleep_for (std::chrono::seconds(5));
-  cout << dp->status << endl;
-
-
-  spdk_end();*/
-  /**
-  int res = spdk_library_start(8);
-
+  int res = spdk_library_start(N_PROCESSES);
   DiskBlock db2 = DiskBlock();
   db2.input = "";
   db2.bal = 0;
@@ -136,18 +122,66 @@ int main(int argc, char const *argv[]) {
   std::future<void> f2 = write("0000:03:00.0",db2,1,4);
   f2.get();
 
+  auto f = initialize("0000:03:00.0", N_PROCESSES*N_LANES , 0);
+  f.get();
+
   spdk_library_end();*/
 
 
-  spdk_start(8,10); // 8 processos, 10 lanes
+  spdk_start(N_PROCESSES,N_LANES); // 8 processos, 10 lanes
   int pid = 7;
 
-  DiskPaxos * dp = new DiskPaxos("test",1,0,pid);
-  start_DiskPaxos(dp);
+  /**
+  DiskPaxos * dp0 = new DiskPaxos("test0",0,pid);
+  start_DiskPaxos(dp0);
 
-  std::this_thread::sleep_for (std::chrono::seconds(5));
-  cout << dp->status << endl;
+  std::this_thread::sleep_for (std::chrono::seconds(1));
 
+  DiskPaxos * dp1 = new DiskPaxos("test1",1,pid);
+  start_DiskPaxos(dp1);
+
+  std::this_thread::sleep_for (std::chrono::seconds(1));
+
+  DiskPaxos * dp2 = new DiskPaxos("test2",2,pid);
+  start_DiskPaxos(dp2);
+
+  std::this_thread::sleep_for (std::chrono::seconds(1));
+
+  DiskPaxos * dp3 = new DiskPaxos("test3",3,pid);
+  start_DiskPaxos(dp3);
+
+  std::this_thread::sleep_for (std::chrono::seconds(1));
+
+  DiskPaxos * dp4 = new DiskPaxos("test4",4,pid);
+  start_DiskPaxos(dp4);
+
+  std::this_thread::sleep_for (std::chrono::seconds(1));
+
+  DiskPaxos * dp5 = new DiskPaxos("test5",5,pid);
+  start_DiskPaxos(dp5);
+
+  std::this_thread::sleep_for (std::chrono::seconds(10));
+  cout << "consensus id: 0 status: " << dp0->status << " finished: " << dp0->finished << endl;
+  cout << "consensus id: 1 status: " << dp1->status << " finished: " << dp1->finished << endl;
+  cout << "consensus id: 2 status: " << dp2->status << " finished: " << dp2->finished << endl;
+  cout << "consensus id: 3 status: " << dp3->status << " finished: " << dp3->finished << endl;
+  cout << "consensus id: 4 status: " << dp4->status << " finished: " << dp4->finished << endl;
+  cout << "consensus id: 5 status: " << dp5->status << " finished: " << dp5->finished << endl;
+
+  propose(pid,0,"opttest");
+  std::this_thread::sleep_for (std::chrono::seconds(2));*/
+  propose(pid,0,"opttest");
+  propose(5,0,"opttest_fst");
+  propose(pid,1,"opttest_snd");
+  std::this_thread::sleep_for (std::chrono::seconds(2));
+
+  std::future<std::unique_ptr<std::map<int,DiskBlock>> > f = read_proposals(0,2);
+  auto res = f.get();
+
+  for (auto & [key, val] : (*res))
+  {
+    std::cout << "KEY: " << key << " val: " << val.toString()  << '\n';
+  }
 
   spdk_end();
 

@@ -72,19 +72,23 @@ struct NVME_NAMESPACE {
 
 struct CallBackOpts {
 	int LBA_INDEX;
+	int LBA_SIZE;
 	size_t size_per_elem;
 
 	CallBackOpts(){
 		LBA_INDEX = 0;
 		size_per_elem = 0;
+		LBA_SIZE = 0;
 	}
 	CallBackOpts(int LBA_VALUE,size_t size_per){
 		LBA_INDEX = LBA_VALUE;
 		size_per_elem = size_per;
+		LBA_SIZE = 0;
 	};
 	CallBackOpts(int LBA_VALUE){
 		LBA_INDEX = LBA_VALUE;
 		size_per_elem = 0;
+		LBA_SIZE = 0;
 	};
 	~CallBackOpts(){};
 };
@@ -109,6 +113,13 @@ struct CallBack {
     status = 0;
 		opts = CallBackOpts(k);
   };
+	CallBack(
+		byte * buffer,
+		std::string disk_id
+	): buffer(buffer), disk(disk_id) {
+		status = 0;
+		opts = CallBackOpts();
+	};
 	CallBack(
 		byte * buffer,
 		std::string disk_id,
@@ -411,8 +422,8 @@ static void initialize_event(void * arg1, void * arg2){
   it = namespaces.find(cb->disk);
 
 	int rc = spdk_nvme_ns_cmd_write(it->second->ns, it->second->qpair, cb->buffer,
-						0, /* LBA start */
-						cb->opts.LBA_INDEX, /* number of LBAs */
+						cb->opts.LBA_INDEX, /* LBA start */
+						cb->opts.LBA_SIZE, /* number of LBAs */
 						write_complete, cb, SPDK_NVME_IO_FLAGS_FORCE_UNIT_ACCESS); //submit a write operation to NVME
 
 	if (rc != 0) {
@@ -426,7 +437,7 @@ static void initialize_event(void * arg1, void * arg2){
 	spdk_event_call(e);
 }
 
-std::future<void> initialize(std::string disk, int k){
+std::future<void> initialize(std::string disk, int size,int offset){
   std::map<std::string,std::unique_ptr<NVME_NAMESPACE>>::iterator it;
   it = namespaces.find(disk);
 
@@ -439,17 +450,19 @@ std::future<void> initialize(std::string disk, int k){
 	DiskBlock db = DiskBlock();
   std::string db_serialized = db.serialize();
 
-  byte * buffer = (byte *) spdk_zmalloc(BUFFER_SIZE * k * NUM_PROCESSES, 0x1000, NULL, SPDK_ENV_SOCKET_ID_ANY, SPDK_MALLOC_DMA);
+  byte * buffer = (byte *) spdk_zmalloc(BUFFER_SIZE * size, 0x1000, NULL, SPDK_ENV_SOCKET_ID_ANY, SPDK_MALLOC_DMA);
 
   if (buffer == NULL) {
     throw std::bad_alloc();
   }
 
-	for (int i = 0; i < (k*NUM_PROCESSES); i++) {
+	for (int i = 0; i < size; i++) {
 		string_to_bytes(db_serialized,buffer + i * BUFFER_SIZE);
 	}
 
-  CallBack<void> * cb = new CallBack<void>(buffer,disk,(k*NUM_PROCESSES));
+  CallBack<void> * cb = new CallBack<void>(buffer,disk);
+	cb->opts.LBA_INDEX = offset;
+	cb->opts.LBA_SIZE = size;
   cb->callback = std::promise<void>();
   auto future = cb->callback.get_future();
 

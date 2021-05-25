@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 
 project(DiskPaxos)
 
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} \
@@ -42,13 +42,13 @@ add_executable(DiskPaxos
   src/BankCommand.cpp
   src/Disk/DiskAccess.cpp
   src/Test/disk_isomorphic_test.cpp
-  src/message.pb.cc
+  #src/message.pb.cc
   src/Disk/DiskPaxos.cpp
 )
 
 ##### PROTOCOL BUFFERS ########
-find_package(Protobuf REQUIRED)
-target_link_libraries(DiskPaxos ${Protobuf_LIBRARIES})
+#find_package(Protobuf REQUIRED)
+#target_link_libraries(DiskPaxos ${Protobuf_LIBRARIES})
 
 add_definitions (${SPDK_LIBS_CFLAGS_OTHER})
 
@@ -95,6 +95,44 @@ target_link_libraries (DiskPaxos
 
 ## static system libs
 target_link_libraries(DiskPaxos
+  -L${SPDK_DIR}/isa-l/.libs
+  -lisal
+  -lrt
+  -luuid
+  -lcrypto
+  -laio
+  -lnuma
+  -ldl
+)
+
+
+add_executable(Reset
+  src/Scripts/reset.cpp
+  src/Disk/DiskBlock.cpp
+  src/Disk/DiskAccess.cpp
+)
+
+target_include_directories (Reset PUBLIC include)
+target_include_directories (Reset PUBLIC ../external)
+target_include_directories (Reset PUBLIC ${SPDK_DIR}/include)
+
+target_link_libraries (
+  Reset
+  -Wl,--whole-archive
+  -Wl,--no-as-needed
+  ${SPDK_LIBS_LIBRARIES}
+  -Wl,--no-whole-archive
+)
+
+target_link_libraries (Reset
+  -Wl,--no-whole-archive
+  ${SPDK_DIR}/build/lib/libspdk_env_dpdk.a
+  -Wl,--whole-archive
+  ${DPDK_LIBS}
+  -Wl,--no-whole-archive
+)
+
+target_link_libraries(Reset
   -L${SPDK_DIR}/isa-l/.libs
   -lisal
   -lrt

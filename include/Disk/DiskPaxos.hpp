@@ -4,7 +4,11 @@
 #include <memory>
 #include <vector>
 #include <set>
+#include <map>
 #include "DiskBlock.hpp"
+#include <chrono>
+#include <atomic>
+#include <future>
 
 class DiskPaxos {
   public:
@@ -20,8 +24,9 @@ class DiskPaxos {
     std::set<std::string> disksSeen;
     std::string input;
     uint32_t target_core;
+    std::atomic<int> finished; //0 running, 1 completed, 2 cleaning up;
 
-    DiskPaxos(std::string input, int slot, uint32_t target_core, int pid);
+    DiskPaxos(std::string input, int slot, int pid);
     void initPhase();
     void startBallot();
     void ReadAndWrite();
@@ -29,11 +34,14 @@ class DiskPaxos {
     void Cancel();
     void Abort(int mbal);
     void phase2();
+    void Commit();
 };
 
 int spdk_start(int n_p,int n_k);
 void spdk_end();
 void start_DiskPaxos(DiskPaxos * dp);
+void propose(int pid, int slot, std::string command);
+std::future<std::unique_ptr<std::map<int,DiskBlock>> > read_proposals(int k,int number_of_slots);
 
 
 
