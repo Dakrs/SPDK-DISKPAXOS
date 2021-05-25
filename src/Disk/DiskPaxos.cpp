@@ -24,63 +24,11 @@ extern "C" {
 #include <atomic>
 #include <algorithm>
 #include <future>
+#include "Disk/SPDK_ENV.hpp"
 
 using namespace std;
 
 #define PROPOSAL_OFFSET 5000000
-
-static int NUM_PROCESSES = 0;
-static int NUM_CONCENSOS_LANES = 0;
-static uint32_t NEXT_CORE = 0;
-static uint32_t NEXT_CORE_REPLICA = 0;
-
-/**
-Struct used to keep track of all controllers found.
-*/
-
-struct NVME_CONTROLER_V2 {
-  struct spdk_nvme_ctrlr *ctrlr;
-  string name;
-
-  NVME_CONTROLER_V2(struct spdk_nvme_ctrlr * ctrlr,char * chr_name){
-    this->ctrlr = ctrlr;
-    name = string(chr_name);
-  };
-  ~NVME_CONTROLER_V2(){
-    cout << "Exiting CTRLR: " << name << endl;
-  };
-};
-
-/**
-Struct to save some info about the nvme namespace used
-*/
-
-struct NVME_NAMESPACE_INFO {
-  uint32_t lbaf; // size in bytes of each block
-	uint32_t metadata_size; // bytes used by metadata of each block
-
-	NVME_NAMESPACE_INFO(uint32_t lbaf,uint32_t metadata_size): lbaf(lbaf), metadata_size(metadata_size){};
-	~NVME_NAMESPACE_INFO(){};
-};
-
-/**
-Struct used to keep track of the namespace used in each controller.
-*/
-
-struct NVME_NAMESPACE_MULTITHREAD {
-  struct spdk_nvme_ctrlr	*ctrlr;
-	struct spdk_nvme_ns	*ns;
-	map<uint32_t,struct spdk_nvme_qpair	*> qpairs;
-	NVME_NAMESPACE_INFO info;
-
-  NVME_NAMESPACE_MULTITHREAD(
-    struct spdk_nvme_ctrlr	*ctrlr,
-    struct spdk_nvme_ns	*ns
-  ): ctrlr(ctrlr), ns(ns), info(NVME_NAMESPACE_INFO( spdk_nvme_ns_get_sector_size(ns), spdk_nvme_ns_get_md_size(ns))) {};
-  ~NVME_NAMESPACE_MULTITHREAD(){
-    cout << "Exiting NAMESPACE: " << endl;
-  };
-};
 
 struct DiskOperation {
 	string disk_id; //disk id
@@ -174,94 +122,6 @@ struct LeaderReadOpt {
 	~LeaderReadOpt(){};
 };
 
-static set<string> addresses; //set a string identifying every disk
-static vector<unique_ptr<NVME_CONTROLER_V2>> controllers; //vector with all controller structures allocated
-static map<string,unique_ptr<NVME_NAMESPACE_MULTITHREAD>> namespaces; // map of disk id to working namespace
-static atomic<bool> ready (false); //flag to make sure spdk libray has started
-static thread internal_spdk_event_launcher; //internal thread to coordinate spdk.
-
-static bool probe_cb(void *cb_ctx,const struct spdk_nvme_transport_id *trid,struct spdk_nvme_ctrlr_opts *opts){
-  std::string addr(trid->traddr);
-  const bool is_in = addresses.find(addr) != addresses.end();
-
-  if (!is_in){
-    addresses.insert(addr);
-    std::cout << "Device on addr: " << addr << std::endl;
-    return true;
-  }
-  return false;
-}
-static int register_ns(struct spdk_nvme_ctrlr *ctrlr,struct spdk_nvme_ns *ns,const struct spdk_nvme_transport_id *trid){
-  if (!spdk_nvme_ns_is_active(ns)) {
-		return -1;
-	}
-
-  NVME_NAMESPACE_MULTITHREAD * my_ns = new NVME_NAMESPACE_MULTITHREAD(ctrlr,ns);
-
-	uint32_t n_cores = spdk_env_get_core_count();
-	uint32_t k = spdk_env_get_first_core();
-	for (uint32_t i = 0; i < n_cores; i++) {
-		my_ns->qpairs.insert(pair<uint32_t,struct spdk_nvme_qpair	*>(k,spdk_nvme_ctrlr_alloc_io_qpair(ctrlr, NULL, 0)));
-		k = spdk_env_get_next_core(k);
-	}
-
-  std::string addr(trid->traddr);
-  namespaces.insert(pair<string,unique_ptr<NVME_NAMESPACE_MULTITHREAD>>(addr,unique_ptr<NVME_NAMESPACE_MULTITHREAD>(my_ns)));
-
-  printf("  Namespace ID: %d size: %juGB %lu \n", spdk_nvme_ns_get_id(ns),
-         spdk_nvme_ns_get_size(ns) / 1000000000, spdk_nvme_ns_get_num_sectors(ns));
-
-  return 0;
-}
-static void attach_cb( void *cb_ctx, const struct spdk_nvme_transport_id *trid, struct spdk_nvme_ctrlr *ctrlr, const struct spdk_nvme_ctrlr_opts *opts){
-  struct spdk_nvme_ns * ns;
-	const struct spdk_nvme_ctrlr_data *cdata;
-
-  //getting controller data
-  cdata = spdk_nvme_ctrlr_get_data(ctrlr);
-  char * chr_name = new char[1024];
-
-  snprintf(chr_name, sizeof(char)*1024, "%-20.20s (%-20.20s)", cdata->mn, cdata->sn);
-
-  NVME_CONTROLER_V2 * current_ctrlr = new NVME_CONTROLER_V2(ctrlr,chr_name);
-
-  delete chr_name;
-
-  int nsid, num_ns;
-  num_ns = spdk_nvme_ctrlr_get_num_ns(ctrlr);
-
-  for (nsid = 1; nsid <= num_ns; nsid++) {
-		ns = spdk_nvme_ctrlr_get_ns(ctrlr, nsid);
-		if (ns == NULL) {
-			continue;
-		}
-		int res = register_ns(ctrlr, ns, trid);
-    if (!res)
-      break; // só quero o primeiro namespace
-	}
-
-  controllers.push_back(unique_ptr<NVME_CONTROLER_V2>(current_ctrlr));
-}
-static void cleanup(void){
-  struct spdk_nvme_detach_ctx *detach_ctx = NULL;
-
-  for(const auto& ns_entry : namespaces){
-    const std::unique_ptr<NVME_NAMESPACE_MULTITHREAD>& ns = ns_entry.second;
-
-		for (const auto& any : ns->qpairs) {
-		   struct spdk_nvme_qpair	* qpair = any.second;
-		   spdk_nvme_ctrlr_free_io_qpair(qpair);
-		}
-  }
-
-  for(auto& ctrl : controllers){
-    spdk_nvme_detach_async(ctrl->ctrlr, &detach_ctx);
-  }
-
-  while (detach_ctx && spdk_nvme_detach_poll_async(detach_ctx) == -EAGAIN){
-		;
-	}
-}
 
 /**
 Function to write a encode byte block into a buffer;
@@ -297,56 +157,6 @@ static std::string bytes_to_string(DiskPaxos::byte * buffer){
 	return std::string((char *)buffer+4,size);
 }
 
-static void app_init(void * arg){
-	int rc = spdk_nvme_probe(NULL, NULL, probe_cb, attach_cb, NULL);
-	if (rc != 0) {
-		fprintf(stderr, "spdk_nvme_probe() failed\n");
-		cleanup();
-		exit(-1);
-	}
-
-	NEXT_CORE = spdk_env_get_first_core();
-	NEXT_CORE_REPLICA = spdk_env_get_first_core();
-
-	ready = true;
-
-	cout << "Succeded: " << spdk_env_get_core_count() << endl;
-}
-static void run_spdk_event_framework(){
-  struct spdk_app_opts app_opts = {};
-  spdk_app_opts_init(&app_opts, sizeof(app_opts));
-	app_opts.name = "event_test";
-	app_opts.reactor_mask = "0x2f";
-
-  int rc = spdk_app_start(&app_opts, app_init, NULL);
-
-	if (rc){
-		cout << "Error might have occured" << endl;
-	}
-
-	cleanup();
-	//spdk_vmd_fini();
-
-	spdk_app_fini();
-}
-
-int spdk_start(int n_p,int n_k) {
-
-	NUM_PROCESSES = n_p;
-	NUM_CONCENSOS_LANES = n_k;
-
-	internal_spdk_event_launcher = thread(run_spdk_event_framework);
-
-	while(!ready);
-
-  return 0;
-}
-
-void spdk_end() {
-	spdk_app_stop(0);
-	internal_spdk_event_launcher.join();
-}
-
 DiskPaxos::DiskPaxos::DiskPaxos(string input, int slot, int pid){
   this->input = input;
   this->tick = 0;
@@ -372,11 +182,7 @@ static void spawn_disk_paxos(void * arg1,void * arg2){
 }
 
 void start_DiskPaxos(DiskPaxos::DiskPaxos * dp){
-	dp->target_core = NEXT_CORE;
-	NEXT_CORE = spdk_env_get_next_core(NEXT_CORE);
-	if (NEXT_CORE == UINT32_MAX){
-		NEXT_CORE = spdk_env_get_first_core();
-	}
+	dp->target_core = SPDK_ENV::allocate_leader_core();;
 
 	struct spdk_event * e = spdk_event_allocate(dp->target_core,spawn_disk_paxos,dp,NULL);
 	spdk_event_call(e);
@@ -394,7 +200,7 @@ void DiskPaxos::DiskPaxos::startBallot(){
 	cout << "Started a new Ballot" << endl;
 	this->tick++;
 	this->phase = 1;
-	this->nextBallot += NUM_PROCESSES;
+	this->nextBallot += SPDK_ENV::NUM_PROCESSES;
 	this->local_block->mbal = this->nextBallot;
 	this->initPhase();
 	this->ReadAndWrite();
@@ -444,8 +250,8 @@ void DiskPaxos::DiskPaxos::endPhase(){
 static void verify_event(void * arg1, void * arg2){
 	DiskOperation * dO = (DiskOperation *) arg1;
 
-	map<string,unique_ptr<NVME_NAMESPACE_MULTITHREAD>>::iterator it;
-	it = namespaces.find(dO->disk_id);
+	map<string,unique_ptr<SPDK_ENV::NVME_NAMESPACE_MULTITHREAD>>::iterator it;
+	it = SPDK_ENV::namespaces.find(dO->disk_id);
 
 	if (!dO->status){
 		map<uint32_t,struct spdk_nvme_qpair	*>::iterator it_qpair;
@@ -476,7 +282,7 @@ static void read_complete(void *arg,const struct spdk_nvme_cpl *completion){
 	dp->n_events--;
 	if (dO->tick == dp->tick){
 		int size_elem = dO->size_elem;
-		for (int i = 0; i < NUM_PROCESSES; i++) {
+		for (int i = 0; i < SPDK_ENV::NUM_PROCESSES; i++) {
 			if (i == dp->pid)
 				continue;
 
@@ -512,7 +318,7 @@ static void read_complete(void *arg,const struct spdk_nvme_cpl *completion){
 		//se a operação for cancelada ou abortada o tick vai aumentar
 		if (dO->tick == dp->tick){
 			dp->disksSeen.insert(dO->disk_id);
-			if (dp->disksSeen.size() > (addresses.size() / 2) ){
+			if (dp->disksSeen.size() > (SPDK_ENV::addresses.size() / 2) ){
 				dp->endPhase();
 			}
 		}
@@ -523,20 +329,20 @@ static void read_complete(void *arg,const struct spdk_nvme_cpl *completion){
 }
 
 static void read_full_line(string disk_id,int tick,DiskPaxos::DiskPaxos * dp){
-	map<string,unique_ptr<NVME_NAMESPACE_MULTITHREAD>>::iterator it;
+	map<string,unique_ptr<SPDK_ENV::NVME_NAMESPACE_MULTITHREAD>>::iterator it;
 	map<uint32_t,struct spdk_nvme_qpair	*>::iterator it_qpair;
 
-	it = namespaces.find(disk_id); //get the namespace for the current disk
+	it = SPDK_ENV::namespaces.find(disk_id); //get the namespace for the current disk
 	it_qpair = it->second->qpairs.find(dp->target_core); // get the queue for the current thread
-	int LBA_INDEX = (dp->slot % NUM_CONCENSOS_LANES) * NUM_PROCESSES; // index of the block to start reading from
+	int LBA_INDEX = (dp->slot % SPDK_ENV::NUM_CONCENSOS_LANES) * SPDK_ENV::NUM_PROCESSES; // index of the block to start reading from
 	size_t BUFFER_SIZE = (it->second->info.lbaf + it->second->info.metadata_size);
 
 	DiskOperation * dO = new DiskOperation(disk_id,tick,BUFFER_SIZE,dp,dp->target_core); // read data object
-	dO->buffer = (DiskPaxos::byte *) spdk_zmalloc(BUFFER_SIZE * NUM_PROCESSES, 0x1000, NULL, SPDK_ENV_SOCKET_ID_ANY, SPDK_MALLOC_DMA);
+	dO->buffer = (DiskPaxos::byte *) spdk_zmalloc(BUFFER_SIZE * SPDK_ENV::NUM_PROCESSES, 0x1000, NULL, SPDK_ENV_SOCKET_ID_ANY, SPDK_MALLOC_DMA);
 
 	int rc = spdk_nvme_ns_cmd_read(it->second->ns, it_qpair->second , dO->buffer,
 						LBA_INDEX, /* LBA start */
-						NUM_PROCESSES, /* number of LBAs */
+						SPDK_ENV::NUM_PROCESSES, /* number of LBAs */
 						read_complete, dO, 0); //submit a write operation to NVME
 
 	if (rc != 0) {
@@ -571,14 +377,14 @@ static void write_complete(void *arg,const struct spdk_nvme_cpl *completion){
 void DiskPaxos::DiskPaxos::ReadAndWrite(){
 	cout << "Started ReadAndWrite Phase: " << this->phase << endl;
 	string local_db_serialized = this->local_block->serialize();
-	map<string,unique_ptr<NVME_NAMESPACE_MULTITHREAD>>::iterator it;
-	int LBA_INDEX = (this->slot % NUM_CONCENSOS_LANES) * NUM_PROCESSES + this->pid;
+	map<string,unique_ptr<SPDK_ENV::NVME_NAMESPACE_MULTITHREAD>>::iterator it;
+	int LBA_INDEX = (this->slot % SPDK_ENV::NUM_CONCENSOS_LANES) * SPDK_ENV::NUM_PROCESSES + this->pid;
 
 	map<uint32_t,struct spdk_nvme_qpair	*>::iterator it_qpair;
 
-	for(auto disk_id : addresses){
-	  it = namespaces.find(disk_id);
-		if (it != namespaces.end()){
+	for(auto disk_id : SPDK_ENV::addresses){
+	  it = SPDK_ENV::namespaces.find(disk_id);
+		if (it != SPDK_ENV::namespaces.end()){
 
 			size_t BUFFER_SIZE = (it->second->info.lbaf + it->second->info.metadata_size);
 			DiskOperation * dO = new DiskOperation(disk_id,this->tick,this,this->target_core);
@@ -630,7 +436,7 @@ void DiskPaxos::DiskPaxos::Cancel(){
 }
 
 void DiskPaxos::DiskPaxos::Abort(int mbal){
-	int pid_responsible = mbal % NUM_PROCESSES;
+	int pid_responsible = mbal % SPDK_ENV::NUM_PROCESSES;
 	cout << "Abort" << endl;
 	if (pid_responsible < this->pid){ // ainda posso ser leader
 		cout << "Still running for leadership" << endl;
@@ -660,7 +466,7 @@ static void write_commit_complete(void *arg,const struct spdk_nvme_cpl *completi
 	DiskPaxos::DiskPaxos * dp = dO->dp;
 
 	dp->disksSeen.insert(dO->disk_id);
-	if (dp->disksSeen.size() > (addresses.size() / 2) && dp->status == 0){
+	if (dp->disksSeen.size() > (SPDK_ENV::addresses.size() / 2) && dp->status == 0){
 		dp->status = 1;
 		dp->finished = 2;
 		struct spdk_event * e = spdk_event_allocate(dp->target_core,cleanup,dp,NULL);
@@ -672,16 +478,16 @@ void DiskPaxos::DiskPaxos::Commit(){
 	cout << "Consensus archived: " << this->local_block->input << endl;
 
 	string local_db_serialized = this->local_block->serialize();
-	map<string,unique_ptr<NVME_NAMESPACE_MULTITHREAD>>::iterator it;
-	int LBA_INDEX = NUM_CONCENSOS_LANES * NUM_PROCESSES + this->slot;
+	map<string,unique_ptr<SPDK_ENV::NVME_NAMESPACE_MULTITHREAD>>::iterator it;
+	int LBA_INDEX = SPDK_ENV::NUM_CONCENSOS_LANES * SPDK_ENV::NUM_PROCESSES + this->slot;
 
 	map<uint32_t,struct spdk_nvme_qpair	*>::iterator it_qpair;
 	this->disksSeen.clear();
 
-	for(auto disk_id: addresses){
-		it = namespaces.find(disk_id);
+	for(auto disk_id: SPDK_ENV::addresses){
+		it = SPDK_ENV::namespaces.find(disk_id);
 
-		if (it != namespaces.end()){
+		if (it != SPDK_ENV::namespaces.end()){
 
 			size_t BUFFER_SIZE = (it->second->info.lbaf + it->second->info.metadata_size);
 			DiskOperation * dO = new DiskOperation(disk_id,this->tick,this,this->target_core);
@@ -730,14 +536,14 @@ static void internal_proposal(void * arg1, void * arg2){
 
 	string local_db_serialized = db.serialize();
 
-	map<string,unique_ptr<NVME_NAMESPACE_MULTITHREAD>>::iterator it;
+	map<string,unique_ptr<SPDK_ENV::NVME_NAMESPACE_MULTITHREAD>>::iterator it;
 	map<uint32_t,struct spdk_nvme_qpair	*>::iterator it_qpair;
-	int LBA_INDEX = NUM_CONCENSOS_LANES * NUM_PROCESSES + PROPOSAL_OFFSET + db.slot * NUM_PROCESSES + props->pid;
+	int LBA_INDEX = SPDK_ENV::NUM_CONCENSOS_LANES * SPDK_ENV::NUM_PROCESSES + PROPOSAL_OFFSET + db.slot * SPDK_ENV::NUM_PROCESSES + props->pid;
 
-	for(auto disk_id: addresses){
-		it = namespaces.find(disk_id);
+	for(auto disk_id: SPDK_ENV::addresses){
+		it = SPDK_ENV::namespaces.find(disk_id);
 
-		if (it != namespaces.end()){
+		if (it != SPDK_ENV::namespaces.end()){
 
 			size_t BUFFER_SIZE = (it->second->info.lbaf + it->second->info.metadata_size);
 			DiskOperation * dO = new DiskOperation(disk_id,props->target_core);
@@ -765,21 +571,18 @@ static void internal_proposal(void * arg1, void * arg2){
 }
 
 void propose(int pid, int slot,string command){
-	Proposal * p = new Proposal(pid,slot,command,NEXT_CORE_REPLICA);
-	NEXT_CORE_REPLICA = spdk_env_get_next_core(NEXT_CORE_REPLICA);
-	if (NEXT_CORE_REPLICA == UINT32_MAX){
-		NEXT_CORE_REPLICA = spdk_env_get_first_core();
-	}
+	uint32_t core = SPDK_ENV::allocate_replica_core();
+	Proposal * p = new Proposal(pid,slot,command,core);
 
-	struct spdk_event * e = spdk_event_allocate(NEXT_CORE_REPLICA,internal_proposal,p,NULL);
+	struct spdk_event * e = spdk_event_allocate(core,internal_proposal,p,NULL);
 	spdk_event_call(e);
 }
 
 static void verify_event_leader(void * arg1, void * arg2){
 	LeaderReadOpt * dO = (LeaderReadOpt *) arg1;
 
-	map<string,unique_ptr<NVME_NAMESPACE_MULTITHREAD>>::iterator it;
-	it = namespaces.find(dO->disk_id);
+	map<string,unique_ptr<SPDK_ENV::NVME_NAMESPACE_MULTITHREAD>>::iterator it;
+	it = SPDK_ENV::namespaces.find(dO->disk_id);
 
 	if (!dO->status){
 		map<uint32_t,struct spdk_nvme_qpair	*>::iterator it_qpair;
@@ -831,8 +634,8 @@ static void leader_read_completion(void *arg,const struct spdk_nvme_cpl *complet
 	for(int i = 0; i < ld->number_of_slots; i++){
 		it = ld->proposals.find(i + ld->starting_slot);
 		if (it == ld->proposals.end()){ //if the current slot doesn't have a command
-			for (int j = 0; j < NUM_PROCESSES; j++) {
-				string db_serialized = bytes_to_string(ld_opt->buffer + ld_opt->size_elem * (i * NUM_PROCESSES + j)); //buffer to string
+			for (int j = 0; j < SPDK_ENV::NUM_PROCESSES; j++) {
+				string db_serialized = bytes_to_string(ld_opt->buffer + ld_opt->size_elem * (i * SPDK_ENV::NUM_PROCESSES + j)); //buffer to string
 				DiskBlock db;
 				db.deserialize(db_serialized); //inverse of serialize
 
@@ -846,7 +649,7 @@ static void leader_read_completion(void *arg,const struct spdk_nvme_cpl *complet
 	ld->disksSeen.insert(ld_opt->disk_id);
 
 
-	if (ld->disksSeen.size() > (addresses.size() / 2)){
+	if (ld->disksSeen.size() > (SPDK_ENV::addresses.size() / 2)){
 		ld->status = 1;
 		auto res = new map<int,DiskBlock>(ld->proposals);
 		ld->callback.set_value(unique_ptr<map<int,DiskBlock>>(res));
@@ -865,25 +668,25 @@ static void leader_read_completion(void *arg,const struct spdk_nvme_cpl *complet
 static void read_list_proposals(void * arg1,void * arg2){
 	LeaderRead * ld = (LeaderRead *) arg1;
 
-	map<string,unique_ptr<NVME_NAMESPACE_MULTITHREAD>>::iterator it;
+	map<string,unique_ptr<SPDK_ENV::NVME_NAMESPACE_MULTITHREAD>>::iterator it;
 	map<uint32_t,struct spdk_nvme_qpair	*>::iterator it_qpair;
 
-	int LBA_INDEX = NUM_CONCENSOS_LANES * NUM_PROCESSES + PROPOSAL_OFFSET + ld->starting_slot * NUM_PROCESSES;
+	int LBA_INDEX = SPDK_ENV::NUM_CONCENSOS_LANES * SPDK_ENV::NUM_PROCESSES + PROPOSAL_OFFSET + ld->starting_slot * SPDK_ENV::NUM_PROCESSES;
 
-	for(auto disk_id: addresses){
-		it = namespaces.find(disk_id);
+	for(auto disk_id: SPDK_ENV::addresses){
+		it = SPDK_ENV::namespaces.find(disk_id);
 
-		if (it != namespaces.end()){
+		if (it != SPDK_ENV::namespaces.end()){
 
 			size_t BUFFER_SIZE = (it->second->info.lbaf + it->second->info.metadata_size);
 			LeaderReadOpt * ld_opt = new LeaderReadOpt(disk_id,BUFFER_SIZE,ld->target_core,ld);
 
-			ld_opt->buffer = (DiskPaxos::byte *) spdk_zmalloc(BUFFER_SIZE * ld->number_of_slots * NUM_PROCESSES, 0x1000, NULL, SPDK_ENV_SOCKET_ID_ANY, SPDK_MALLOC_DMA);
+			ld_opt->buffer = (DiskPaxos::byte *) spdk_zmalloc(BUFFER_SIZE * ld->number_of_slots * SPDK_ENV::NUM_PROCESSES, 0x1000, NULL, SPDK_ENV_SOCKET_ID_ANY, SPDK_MALLOC_DMA);
 			it_qpair = it->second->qpairs.find(ld_opt->target_core);
 
 			int rc = spdk_nvme_ns_cmd_read(it->second->ns, it_qpair->second , ld_opt->buffer,
 								LBA_INDEX,
-								NUM_PROCESSES*ld->number_of_slots,
+								SPDK_ENV::NUM_PROCESSES*ld->number_of_slots,
 								leader_read_completion, ld_opt,0);
 
 			if (rc != 0) {
@@ -900,11 +703,8 @@ static void read_list_proposals(void * arg1,void * arg2){
 }
 
 std::future<unique_ptr<map<int,DiskBlock>> > read_proposals(int k,int number_of_slots){
-	LeaderRead * ld = new LeaderRead(k,number_of_slots,NEXT_CORE);
-	NEXT_CORE = spdk_env_get_next_core(NEXT_CORE);
-	if (NEXT_CORE == UINT32_MAX){
-		NEXT_CORE = spdk_env_get_first_core();
-	}
+	uint32_t core = SPDK_ENV::allocate_leader_core();
+	LeaderRead * ld = new LeaderRead(k,number_of_slots,core);
 
 	ld->callback = promise<unique_ptr< map<int,DiskBlock> >>();
 	auto response = ld->callback.get_future();

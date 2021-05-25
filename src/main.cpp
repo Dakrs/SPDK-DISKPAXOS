@@ -12,6 +12,7 @@
 #include <vector>
 #include "Test/disk_isomorphic_test.hpp"
 #include "Disk/DiskPaxos.hpp"
+#include "Disk/SPDK_ENV.hpp"
 
 /**
 #### MULTIPLE REQUESTS ####
@@ -128,10 +129,29 @@ int main(int argc, char const *argv[]) {
   spdk_library_end();*/
 
 
-  spdk_start(N_PROCESSES,N_LANES); // 8 processos, 10 lanes
+  //spdk_start(N_PROCESSES,N_LANES); // 8 processos, 10 lanes
+  //int pid = 7;
+
+  /**
+  propose(pid,0,"opttest");
+  propose(5,0,"opttest_fst");
+  propose(pid,1,"opttest_snd");
+  std::this_thread::sleep_for (std::chrono::seconds(2));
+
+  std::future<std::unique_ptr<std::map<int,DiskBlock>> > f = read_proposals(0,2);
+  auto res = f.get();
+
+  for (auto & [key, val] : (*res))
+  {
+    std::cout << "KEY: " << key << " val: " << val.toString()  << '\n';
+  }*/
+
+  //spdk_end();
+
+  SPDK_ENV::spdk_start(N_PROCESSES,N_LANES);
+
   int pid = 7;
-
-
+  /**
   DiskPaxos::DiskPaxos * dp0 = new DiskPaxos::DiskPaxos("test0",0,pid);
   start_DiskPaxos(dp0);
 
@@ -166,7 +186,7 @@ int main(int argc, char const *argv[]) {
   cout << "consensus id: 2 status: " << dp2->status << " finished: " << dp2->finished << endl;
   cout << "consensus id: 3 status: " << dp3->status << " finished: " << dp3->finished << endl;
   cout << "consensus id: 4 status: " << dp4->status << " finished: " << dp4->finished << endl;
-  cout << "consensus id: 5 status: " << dp5->status << " finished: " << dp5->finished << endl;
+  cout << "consensus id: 5 status: " << dp5->status << " finished: " << dp5->finished << endl;*/
 
   /**
   propose(pid,0,"opttest");
@@ -182,7 +202,8 @@ int main(int argc, char const *argv[]) {
     std::cout << "KEY: " << key << " val: " << val.toString()  << '\n';
   }*/
 
-  spdk_end();
+
+  SPDK_ENV::spdk_end();
 
   return 0;
 }

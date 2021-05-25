@@ -42,6 +42,7 @@ add_executable(DiskPaxos
   src/BankCommand.cpp
   src/Disk/DiskAccess.cpp
   src/Test/disk_isomorphic_test.cpp
+  src/Disk/SPDK_ENV.cpp
   #src/message.pb.cc
   src/Disk/DiskPaxos.cpp
 )
