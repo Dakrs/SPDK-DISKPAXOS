@@ -39,13 +39,11 @@ namespace DiskPaxos {
       void phase2();
       void Commit();
   };
-}
 
-int spdk_start(int n_p,int n_k);
-void spdk_end();
-void start_DiskPaxos(DiskPaxos::DiskPaxos * dp);
-void propose(int pid, int slot, std::string command);
-std::future<std::unique_ptr<std::map<int,DiskBlock>> > read_proposals(int k,int number_of_slots);
+  void launch_DiskPaxos(DiskPaxos * dp);
+  void propose(int pid, int slot, std::string command);
+  std::future<std::unique_ptr<std::map<int,DiskBlock>> > read_proposals(int k,int number_of_slots);
+}
 
 
 

@@ -181,13 +181,6 @@ static void spawn_disk_paxos(void * arg1,void * arg2){
 	dp->startBallot();
 }
 
-void start_DiskPaxos(DiskPaxos::DiskPaxos * dp){
-	dp->target_core = SPDK_ENV::allocate_leader_core();;
-
-	struct spdk_event * e = spdk_event_allocate(dp->target_core,spawn_disk_paxos,dp,NULL);
-	spdk_event_call(e);
-}
-
 void DiskPaxos::DiskPaxos::initPhase(){
 	this->disksSeen.clear();
 	this->blocksSeen.clear();
@@ -217,8 +210,9 @@ void DiskPaxos::DiskPaxos::endPhase(){
 	this->tick++;
 	cout << "Completed phase " << this->phase << " N_E: " << this->n_events << endl;
 
+	/** Printing of blocks
 	for(auto & bk : this->blocksSeen)
-		cout << bk->toString() << endl;
+		cout << bk->toString() << endl;*/
 
 	if (this->phase == 1){
 		this->local_block->bal = this->local_block->mbal;
@@ -570,7 +564,7 @@ static void internal_proposal(void * arg1, void * arg2){
 	delete props;
 }
 
-void propose(int pid, int slot,string command){
+void DiskPaxos::propose(int pid, int slot,string command){
 	uint32_t core = SPDK_ENV::allocate_replica_core();
 	Proposal * p = new Proposal(pid,slot,command,core);
 
@@ -702,7 +696,7 @@ static void read_list_proposals(void * arg1,void * arg2){
 
 }
 
-std::future<unique_ptr<map<int,DiskBlock>> > read_proposals(int k,int number_of_slots){
+std::future<unique_ptr<map<int,DiskBlock>> > DiskPaxos::read_proposals(int k,int number_of_slots){
 	uint32_t core = SPDK_ENV::allocate_leader_core();
 	LeaderRead * ld = new LeaderRead(k,number_of_slots,core);
 
@@ -713,4 +707,13 @@ std::future<unique_ptr<map<int,DiskBlock>> > read_proposals(int k,int number_of_
 	spdk_event_call(e);
 
 	return response;
+}
+
+namespace DiskPaxos {
+	void launch_DiskPaxos(DiskPaxos * dp){
+		dp->target_core = SPDK_ENV::allocate_leader_core();;
+
+		struct spdk_event * e = spdk_event_allocate(dp->target_core,spawn_disk_paxos,dp,NULL);
+		spdk_event_call(e);
+	}
 }

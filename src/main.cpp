@@ -13,6 +13,7 @@
 #include "Test/disk_isomorphic_test.hpp"
 #include "Disk/DiskPaxos.hpp"
 #include "Disk/SPDK_ENV.hpp"
+#include "Processes/Leader.hpp"
 
 /**
 #### MULTIPLE REQUESTS ####
@@ -189,18 +190,27 @@ int main(int argc, char const *argv[]) {
   cout << "consensus id: 5 status: " << dp5->status << " finished: " << dp5->finished << endl;*/
 
   /**
-  propose(pid,0,"opttest");
-  propose(5,0,"opttest_fst");
-  propose(pid,1,"opttest_snd");
+  DiskPaxos::propose(pid,0,"opttest");
+  DiskPaxos::propose(5,0,"opttest_fst");
+  DiskPaxos::propose(pid,1,"opttest_snd");
   std::this_thread::sleep_for (std::chrono::seconds(2));
 
-  std::future<std::unique_ptr<std::map<int,DiskBlock>> > f = read_proposals(0,2);
+  std::future<std::unique_ptr<std::map<int,DiskBlock>> > f = DiskPaxos::read_proposals(0,2);
   auto res = f.get();
 
   for (auto & [key, val] : (*res))
   {
     std::cout << "KEY: " << key << " val: " << val.toString()  << '\n';
   }*/
+  LeaderPaxos::LeaderPaxos lp(pid,N_LANES);
+
+  std::thread t(&LeaderPaxos::LeaderPaxos::run,&lp);
+  for (int i = 0; i < 10; i++) {
+    std::string command = "nextTest" + std::to_string(i);
+    DiskPaxos::propose(pid,i,command);
+  }
+  t.join();
+  std::this_thread::sleep_for (std::chrono::seconds(10));
 
 
   SPDK_ENV::spdk_end();

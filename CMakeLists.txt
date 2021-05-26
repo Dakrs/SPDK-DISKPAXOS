@@ -44,6 +44,7 @@ add_executable(DiskPaxos
   src/Test/disk_isomorphic_test.cpp
   src/Disk/SPDK_ENV.cpp
   #src/message.pb.cc
+  src/Processes/Leader.cpp
   src/Disk/DiskPaxos.cpp
 )
 
