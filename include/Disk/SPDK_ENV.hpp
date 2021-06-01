@@ -68,7 +68,7 @@ namespace SPDK_ENV {
   extern std::vector<std::unique_ptr<NVME_CONTROLER_V2>> controllers;
   extern std::map<std::string,std::unique_ptr<NVME_NAMESPACE_MULTITHREAD>> namespaces;
 
-  int spdk_start(int n_p,int n_k);
+  int spdk_start(int n_p,int n_k,const char * CPU_MASK);
   void spdk_end();
   uint32_t allocate_leader_core();
   uint32_t allocate_replica_core();

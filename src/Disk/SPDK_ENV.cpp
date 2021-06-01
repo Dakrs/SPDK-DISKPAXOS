@@ -119,11 +119,11 @@ namespace SPDK_ENV {
   	std::cout << "Succeded: " << spdk_env_get_core_count() << std::endl;
   }
 
-  static void run_spdk_event_framework(){
+  static void run_spdk_event_framework(const char * CPU_MASK){
     struct spdk_app_opts app_opts = {};
     spdk_app_opts_init(&app_opts, sizeof(app_opts));
   	app_opts.name = "event_test";
-  	app_opts.reactor_mask = "0x2f";
+  	app_opts.reactor_mask = CPU_MASK;
 
     int rc = spdk_app_start(&app_opts, app_init, NULL);
 
@@ -137,12 +137,12 @@ namespace SPDK_ENV {
   	spdk_app_fini();
   }
 
-  int spdk_start(int n_p,int n_k) {
+  int spdk_start(int n_p,int n_k,const char * CPU_MASK) {
 
   	NUM_PROCESSES = n_p;
   	NUM_CONCENSOS_LANES = n_k;
 
-  	internal_spdk_event_launcher = std::thread(run_spdk_event_framework);
+  	internal_spdk_event_launcher = std::thread(run_spdk_event_framework,CPU_MASK);
 
   	while(!ready);
 

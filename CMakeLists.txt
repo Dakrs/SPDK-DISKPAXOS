@@ -45,6 +45,7 @@ add_executable(DiskPaxos
   src/Disk/SPDK_ENV.cpp
   #src/message.pb.cc
   src/Processes/Leader.cpp
+  src/Processes/Replica.cpp
   src/Disk/DiskPaxos.cpp
 )
 

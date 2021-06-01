@@ -447,8 +447,9 @@ std::future<void> initialize(std::string disk, int size,int offset){
 
   size_t BUFFER_SIZE = (it->second->lbaf + it->second->metadata_size);
 
+	/**
 	DiskBlock db = DiskBlock();
-  std::string db_serialized = db.serialize();
+  std::string db_serialized = db.serialize();*/
 
   byte * buffer = (byte *) spdk_zmalloc(BUFFER_SIZE * size, 0x1000, NULL, SPDK_ENV_SOCKET_ID_ANY, SPDK_MALLOC_DMA);
 
@@ -456,9 +457,10 @@ std::future<void> initialize(std::string disk, int size,int offset){
     throw std::bad_alloc();
   }
 
+	/**
 	for (int i = 0; i < size; i++) {
 		string_to_bytes(db_serialized,buffer + i * BUFFER_SIZE);
-	}
+	}*/
 
   CallBack<void> * cb = new CallBack<void>(buffer,disk);
 	cb->opts.LBA_INDEX = offset;

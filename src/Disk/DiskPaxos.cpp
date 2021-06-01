@@ -30,6 +30,9 @@ using namespace std;
 
 #define PROPOSAL_OFFSET 5000000
 
+static void read_decision_cleanup(void * arg1, void * arg2);
+static void read_decision_completion(void *arg,const struct spdk_nvme_cpl *completion);
+
 struct DiskOperation {
 	string disk_id; //disk id
 	int tick; //
@@ -72,6 +75,38 @@ struct Proposal {
 	~Proposal(){};
 };
 
+struct DecisionRead {
+	int target_slot;
+	uint32_t target_core;
+	int status; //0 running, 1 ended;
+	int n_events;
+	promise<DiskBlock> callback;
+
+	DecisionRead(int slot,int target_core): target_slot(slot), target_core(target_core), status(0),n_events(0){};
+	~DecisionRead(){
+		//std::cout << "DecisionRead cleaned" << std::endl;
+	};
+};
+
+struct DecisionReadOpt {
+	string disk_id; //identifier of a disk
+	size_t size_elem; //block size supported
+	int status; //current status, 0 running, 1 finished
+	uint32_t target_core; // allocated core
+	DiskPaxos::byte * buffer; //buffer used for the opt
+	DecisionRead * dr; //master object for read
+
+	DecisionReadOpt(
+		string disk_id,
+		size_t size_e,
+		uint32_t target_core,
+		DecisionRead * dr_p
+	): disk_id(disk_id), size_elem(size_e),target_core(target_core), dr(dr_p){
+		this->status = 0;
+	};
+	~DecisionReadOpt(){};
+};
+
 /**
 Master Object to perform a read on a set of proposals
 */
@@ -95,7 +130,7 @@ struct LeaderRead {
 		this->status = 0;
 	};
 	~LeaderRead(){
-		cout << "Cleaded" << endl;
+		//cout << "Cleaned" << endl;
 	};
 };
 
@@ -177,7 +212,7 @@ DiskPaxos::DiskPaxos::DiskPaxos(string input, int slot, int pid){
 
 static void spawn_disk_paxos(void * arg1,void * arg2){
 	DiskPaxos::DiskPaxos * dp = (DiskPaxos::DiskPaxos *) arg1;
-	cout << "Starting consensus for slot: " << dp->slot << " on core: " << dp->target_core << endl;
+	//cout << "Starting consensus for slot: " << dp->slot << " on core: " << dp->target_core << endl;
 	dp->startBallot();
 }
 
@@ -190,7 +225,7 @@ void DiskPaxos::DiskPaxos::initPhase(){
 }
 
 void DiskPaxos::DiskPaxos::startBallot(){
-	cout << "Started a new Ballot" << endl;
+	//cout << "Started a new Ballot" << endl;
 	this->tick++;
 	this->phase = 1;
 	this->nextBallot += SPDK_ENV::NUM_PROCESSES;
@@ -200,7 +235,7 @@ void DiskPaxos::DiskPaxos::startBallot(){
 }
 
 void DiskPaxos::DiskPaxos::phase2(){
-	cout << "Began phase " << this->phase << " N_E: " << this->n_events << endl;
+	//cout << "Began phase " << this->phase << " N_E: " << this->n_events << endl;
 	this->phase = 2;
 	this->initPhase();
 	this->ReadAndWrite();
@@ -208,7 +243,7 @@ void DiskPaxos::DiskPaxos::phase2(){
 
 void DiskPaxos::DiskPaxos::endPhase(){
 	this->tick++;
-	cout << "Completed phase " << this->phase << " N_E: " << this->n_events << endl;
+	//cout << "Completed phase " << this->phase << " N_E: " << this->n_events << endl;
 
 	/** Printing of blocks
 	for(auto & bk : this->blocksSeen)
@@ -223,13 +258,13 @@ void DiskPaxos::DiskPaxos::endPhase(){
 		this->blocksSeen.erase(new_end,this->blocksSeen.end());
 
 		if (this->blocksSeen.size() != 0){
-			cout << "Phase " << this->phase << " More than 1 block" << endl;
+			//cout << "Phase " << this->phase << " More than 1 block" << endl;
 			auto max_blk = max_element(this->blocksSeen.begin(),this->blocksSeen.end(),
 				[] (const unique_ptr<DiskBlock>& bk1, const unique_ptr<DiskBlock>& bk2) {
 					return bk1->bal < bk2->bal;
 				});
 			this->local_block->input = (*max_blk)->input;
-			cout << "Phase " << this->phase << " Choose: " << (*max_blk)->input << endl;
+			//cout << "Phase " << this->phase << " Choose: " << (*max_blk)->input << endl;
 		}
 		else{
 			this->local_block->input = this->input;
@@ -360,7 +395,7 @@ static void write_complete(void *arg,const struct spdk_nvme_cpl *completion){
 	}
 
 	spdk_free(dO->buffer);
-	cout << "Write on " << dO->disk_id << " completed" << endl;
+	//cout << "Write on " << dO->disk_id << " completed" << endl;
 	if (dO->tick == dO->dp->tick){
 		read_full_line(dO->disk_id,dO->tick,dO->dp);
 	}
@@ -369,7 +404,7 @@ static void write_complete(void *arg,const struct spdk_nvme_cpl *completion){
 }
 
 void DiskPaxos::DiskPaxos::ReadAndWrite(){
-	cout << "Started ReadAndWrite Phase: " << this->phase << endl;
+	//cout << "Started ReadAndWrite Phase: " << this->phase << endl;
 	string local_db_serialized = this->local_block->serialize();
 	map<string,unique_ptr<SPDK_ENV::NVME_NAMESPACE_MULTITHREAD>>::iterator it;
 	int LBA_INDEX = (this->slot % SPDK_ENV::NUM_CONCENSOS_LANES) * SPDK_ENV::NUM_PROCESSES + this->pid;
@@ -415,7 +450,7 @@ static void cleanup(void * arg1, void * arg2){
 	}
 	else{
 		dp->finished = 1;
-		cout << "Consensus finished" << endl;
+		//cout << "Consensus finished" << endl;
 	}
 }
 
@@ -431,13 +466,13 @@ void DiskPaxos::DiskPaxos::Cancel(){
 
 void DiskPaxos::DiskPaxos::Abort(int mbal){
 	int pid_responsible = mbal % SPDK_ENV::NUM_PROCESSES;
-	cout << "Abort" << endl;
+	//cout << "Abort" << endl;
 	if (pid_responsible < this->pid){ // ainda posso ser leader
-		cout << "Still running for leadership" << endl;
+		//cout << "Still running for leadership" << endl;
 		this->startBallot();
 	}
 	else{ // tenho a certeza que não vou ser lider
-		cout << "No longer running for leadership" << endl;
+		//cout << "No longer running for leadership" << endl;
 		this->Cancel();
 	}
 }
@@ -453,7 +488,7 @@ static void write_commit_complete(void *arg,const struct spdk_nvme_cpl *completi
 	}
 
 	spdk_free(dO->buffer);
-	cout << "Commit on: " << dO->disk_id << " started" << endl;
+	//cout << "Commit on: " << dO->disk_id << " started" << endl;
 	dO->dp->n_events--;
 	dO->status = 1;
 
@@ -469,7 +504,7 @@ static void write_commit_complete(void *arg,const struct spdk_nvme_cpl *completi
 }
 
 void DiskPaxos::DiskPaxos::Commit(){
-	cout << "Consensus archived: " << this->local_block->input << endl;
+	cout << "Consensus archived: " << this->local_block->input << " for slot: " << this->local_block->slot << endl;
 
 	string local_db_serialized = this->local_block->serialize();
 	map<string,unique_ptr<SPDK_ENV::NVME_NAMESPACE_MULTITHREAD>>::iterator it;
@@ -572,6 +607,14 @@ void DiskPaxos::propose(int pid, int slot,string command){
 	spdk_event_call(e);
 }
 
+void DiskPaxos::propose(int pid, int slot,string command,uint32_t target_core){
+	uint32_t core = target_core;
+	Proposal * p = new Proposal(pid,slot,command,core);
+
+	struct spdk_event * e = spdk_event_allocate(core,internal_proposal,p,NULL);
+	spdk_event_call(e);
+}
+
 static void verify_event_leader(void * arg1, void * arg2){
 	LeaderReadOpt * dO = (LeaderReadOpt *) arg1;
 
@@ -656,7 +699,7 @@ static void leader_read_completion(void *arg,const struct spdk_nvme_cpl *complet
 	spdk_free(ld_opt->buffer);
 	ld_opt->status = 1;
 
-	std::cout << "Read Proposal Completed" << '\n';
+	//std::cout << "Read Proposal Completed" << '\n';
 }
 
 static void read_list_proposals(void * arg1,void * arg2){
@@ -709,9 +752,183 @@ std::future<unique_ptr<map<int,DiskBlock>> > DiskPaxos::read_proposals(int k,int
 	return response;
 }
 
+std::future<unique_ptr<map<int,DiskBlock>> > DiskPaxos::read_proposals(int k,int number_of_slots,uint32_t target_core){
+	uint32_t core = target_core;
+	LeaderRead * ld = new LeaderRead(k,number_of_slots,core);
+
+	ld->callback = promise<unique_ptr< map<int,DiskBlock> >>();
+	auto response = ld->callback.get_future();
+
+	struct spdk_event * e = spdk_event_allocate(ld->target_core,read_list_proposals,ld,NULL);
+	spdk_event_call(e);
+
+	return response;
+}
+
+static void read_decision_repeat(DecisionReadOpt * dO){
+
+	map<string,unique_ptr<SPDK_ENV::NVME_NAMESPACE_MULTITHREAD>>::iterator it;
+	map<uint32_t,struct spdk_nvme_qpair	*>::iterator it_qpair;
+
+	int LBA_INDEX = SPDK_ENV::NUM_CONCENSOS_LANES * SPDK_ENV::NUM_PROCESSES + dO->dr->target_slot;
+
+	it = SPDK_ENV::namespaces.find(dO->disk_id);
+	it_qpair = it->second->qpairs.find(dO->target_core);
+
+	int rc = spdk_nvme_ns_cmd_read(it->second->ns, it_qpair->second , dO->buffer,
+						LBA_INDEX,
+						1,
+						read_decision_completion, dO,0);
+
+	if (rc != 0) {
+			fprintf(stderr, "starting write I/O failed\n");
+			exit(1);
+	}
+}
+
+static void read_decision_cleanup(void * arg1, void * arg2){
+	DecisionRead * ld = (DecisionRead * ) arg1;
+
+	if (ld->n_events > 0){
+		struct spdk_event * e = spdk_event_allocate(ld->target_core,LeaderRead_cleanup,ld,NULL);
+		spdk_event_call(e);
+	}
+	else{
+		delete ld;
+	}
+}
+
+static void read_decision_completion(void *arg,const struct spdk_nvme_cpl *completion){
+	DecisionReadOpt * ld_opt = (DecisionReadOpt *) arg;
+
+	if (spdk_nvme_cpl_is_error(completion)) {
+		fprintf(stderr, "I/O error status: %s\n", spdk_nvme_cpl_get_status_string(&completion->status));
+		fprintf(stderr, "Write I/O failed, aborting run\n");
+		ld_opt->status = 2;
+		exit(1);
+	}
+
+	DecisionRead * ld = ld_opt->dr;
+
+	if (ld->status){ //already ended the read from a majority of disks
+		ld->n_events--;
+		spdk_free(ld_opt->buffer);
+		ld_opt->status = 1;
+		return;
+	}
+
+	string db_serialized = bytes_to_string(ld_opt->buffer); //buffer to string
+	DiskBlock db;
+	db.deserialize(db_serialized); //inverse of serialize
+
+	if (db.isValid()){
+		ld->callback.set_value(db);
+		ld->n_events--;
+		spdk_free(ld_opt->buffer);
+		ld_opt->status = 1;
+		ld->status = 1;
+
+		struct spdk_event * e = spdk_event_allocate(ld->target_core,read_decision_cleanup,ld,NULL);
+		spdk_event_call(e);
+	}
+	else{
+		read_decision_repeat(ld_opt);
+	}
+}
+
+static void verify_event_decision(void * arg1, void * arg2){
+	DecisionReadOpt * dO = (DecisionReadOpt *) arg1;
+
+	map<string,unique_ptr<SPDK_ENV::NVME_NAMESPACE_MULTITHREAD>>::iterator it;
+	it = SPDK_ENV::namespaces.find(dO->disk_id);
+
+	if (!dO->status){
+		map<uint32_t,struct spdk_nvme_qpair	*>::iterator it_qpair;
+		it_qpair = it->second->qpairs.find(dO->target_core);
+
+		spdk_nvme_qpair_process_completions(it_qpair->second, 0);
+
+		struct spdk_event * e = spdk_event_allocate(dO->target_core,verify_event_decision,dO,NULL);
+		spdk_event_call(e);
+	}
+	else{
+		delete dO;
+	}
+}
+
+static void read_decision_event(void * arg1,void * arg2){
+	DecisionRead * ld = (DecisionRead *) arg1;
+
+	map<string,unique_ptr<SPDK_ENV::NVME_NAMESPACE_MULTITHREAD>>::iterator it;
+	map<uint32_t,struct spdk_nvme_qpair	*>::iterator it_qpair;
+
+	int LBA_INDEX = SPDK_ENV::NUM_CONCENSOS_LANES * SPDK_ENV::NUM_PROCESSES + ld->target_slot;
+
+	for(auto disk_id: SPDK_ENV::addresses){
+		it = SPDK_ENV::namespaces.find(disk_id);
+
+		if (it != SPDK_ENV::namespaces.end()){
+
+			size_t BUFFER_SIZE = (it->second->info.lbaf + it->second->info.metadata_size);
+			DecisionReadOpt * ld_opt = new DecisionReadOpt(disk_id,BUFFER_SIZE,ld->target_core,ld);
+
+			ld_opt->buffer = (DiskPaxos::byte *) spdk_zmalloc(BUFFER_SIZE, 0x1000, NULL, SPDK_ENV_SOCKET_ID_ANY, SPDK_MALLOC_DMA);
+			it_qpair = it->second->qpairs.find(ld_opt->target_core);
+
+			int rc = spdk_nvme_ns_cmd_read(it->second->ns, it_qpair->second , ld_opt->buffer,
+								LBA_INDEX,
+								1,
+								read_decision_completion, ld_opt,0);
+
+			if (rc != 0) {
+					fprintf(stderr, "starting write I/O failed\n");
+					exit(1);
+			}
+
+			ld->n_events++;
+			struct spdk_event * e = spdk_event_allocate(ld_opt->target_core,verify_event_decision,ld_opt,NULL);
+			spdk_event_call(e);
+		}
+	}
+
+}
+
+std::future<DiskBlock> DiskPaxos::read_decision(int slot){
+	uint32_t core = SPDK_ENV::allocate_replica_core();
+	DecisionRead * dr = new DecisionRead(slot,core);
+
+	dr->callback = promise<DiskBlock>();
+	auto response = dr->callback.get_future();
+
+	struct spdk_event * e = spdk_event_allocate(dr->target_core,read_decision_event,dr,NULL);
+	spdk_event_call(e);
+
+	return response;
+}
+
+std::future<DiskBlock> DiskPaxos::read_decision(int slot,uint32_t target_core){
+	uint32_t core = target_core;
+	DecisionRead * dr = new DecisionRead(slot,core);
+
+	dr->callback = promise<DiskBlock>();
+	auto response = dr->callback.get_future();
+
+	struct spdk_event * e = spdk_event_allocate(dr->target_core,read_decision_event,dr,NULL);
+	spdk_event_call(e);
+
+	return response;
+}
+
 namespace DiskPaxos {
 	void launch_DiskPaxos(DiskPaxos * dp){
-		dp->target_core = SPDK_ENV::allocate_leader_core();;
+		dp->target_core = SPDK_ENV::allocate_leader_core();
+
+		struct spdk_event * e = spdk_event_allocate(dp->target_core,spawn_disk_paxos,dp,NULL);
+		spdk_event_call(e);
+	}
+
+	void launch_DiskPaxos(DiskPaxos * dp,uint32_t target_core){
+		dp->target_core = target_core;
 
 		struct spdk_event * e = spdk_event_allocate(dp->target_core,spawn_disk_paxos,dp,NULL);
 		spdk_event_call(e);
