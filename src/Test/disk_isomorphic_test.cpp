@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <random>
 #include <stdlib.h>
+#include <string>
 
 static std::string gen_random(const int len) {
 
@@ -35,9 +36,9 @@ static DiskBlock gen_random_block(){
   return db;
 }
 
-DiskTest::DiskTest(int k, int n_p){
+DiskTest::DiskTest(int k, int n_p, std::string disk, char * trid){
   srand( (unsigned) time(NULL) * getpid());
-  int res = spdk_library_start(n_p);
+  int res = spdk_library_start(n_p,trid);
 
 	if (res){
     std::cout << "An error occured while initializing SPDK" << std::endl;
@@ -46,8 +47,9 @@ DiskTest::DiskTest(int k, int n_p){
 
   this->k = k;
   this->NUM_PROCESSES = n_p;
+  this->addresses = disk;
 
-  std::future<void> f1 = initialize("0000:03:00.0",this->k * this->NUM_PROCESSES,0);
+  std::future<void> f1 = initialize(this->addresses,this->k * this->NUM_PROCESSES,0);
 	f1.get();
 	std::cout << "initialize blocks completed" << std::endl;
 }
@@ -60,10 +62,10 @@ bool DiskTest::single_write_read_test(void){
 
   int index = row * this->NUM_PROCESSES + column;
 
-  std::future<void> f1 = write("0000:03:00.0",db,row,column);
+  std::future<void> f1 = write(this->addresses,db,row,column);
   f1.get();
 
-  std::future<std::unique_ptr<DiskBlock>> f3 = read("0000:03:00.0",index);
+  std::future<std::unique_ptr<DiskBlock>> f3 = read(this->addresses,index);
   auto db2 = f3.get();
 
   bool res = db.input.compare(db2->input) == 0 && db.bal == db2->bal && db.mbal == db2->mbal && db.slot == db2->slot;
@@ -76,10 +78,10 @@ bool DiskTest::single_write_read_test(int row,int column){
 
   int index = row * this->NUM_PROCESSES + column;
 
-  std::future<void> f1 = write("0000:03:00.0",db,row,column);
+  std::future<void> f1 = write(this->addresses,db,row,column);
   f1.get();
 
-  std::future<std::unique_ptr<DiskBlock>> f3 = read("0000:03:00.0",index);
+  std::future<std::unique_ptr<DiskBlock>> f3 = read(this->addresses,index);
   auto db2 = f3.get();
 
   bool res = db.input.compare(db2->input) == 0 && db.bal == db2->bal && db.mbal == db2->mbal && db.slot == db2->slot;
@@ -93,7 +95,7 @@ void DiskTest::random_read(int max_row,int max_column){
 
   int index = row * this->NUM_PROCESSES + column;
 
-  std::future<std::unique_ptr<DiskBlock>> f3 = read("0000:03:00.0",index);
+  std::future<std::unique_ptr<DiskBlock>> f3 = read(this->addresses,index);
   auto db2 = f3.get();
 }
 
@@ -105,8 +107,9 @@ int DiskTest::multi_write_read_test(int number_of_tests){
   for (int i = 0; i < number_of_tests; i++) {
     res = this->single_write_read_test();
 
-    if (res)
+    if (res){
       k++;
+    }
   }
 
   return k;
@@ -126,14 +129,16 @@ int DiskTest::multi_random_read_test(int number_of_tests){
 
 void DiskTest::run_every_test(int number_of_tests){
 
-  std::cout << "Current config: Value k = " << this->k << " N_PROCESSES = " << this->NUM_PROCESSES << " N_TESTS = " << number_of_tests << std::endl;
-  std::cout << "Running multi random writes and then reads" << std::endl;
+  int res;
 
-  int res = this->multi_write_read_test(number_of_tests);
-  std::cout << "Passed " << res << " of " << number_of_tests << " Tests" << std::endl;
+  std::cout << "Current config: Value k = " << this->k << " N_PROCESSES = " << this->NUM_PROCESSES << " N_TESTS = " << number_of_tests << std::endl;
 
   std::cout << "Running multi random reads" << std::endl;
   res = this->multi_random_read_test(number_of_tests);
+  std::cout << "Passed " << res << " of " << number_of_tests << " Tests" << std::endl;
+
+  std::cout << "Running multi random writes and then reads" << std::endl;
+  res = this->multi_write_read_test(number_of_tests);
   std::cout << "Passed " << res << " of " << number_of_tests << " Tests" << std::endl;
 
 }

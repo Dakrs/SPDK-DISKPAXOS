@@ -64,7 +64,7 @@ namespace ReplicaPaxos {
 
     for(auto it = this->decisionsTosolve.begin(); it != this->decisionsTosolve.end();){
 
-      if ((*it)->isReady()){
+      if ((*it)->isReady()){//a decision already finished
         auto db = (*it)->get(); //diskblock with result
         it_map = this->proposals.find(db.slot);
 
@@ -89,10 +89,11 @@ namespace ReplicaPaxos {
       }
     }
 
+    /**
     for(auto i : toRestart){
       Decision * d = new Decision(i);
       this->decisionsTosolve.insert(std::unique_ptr<Decision>(d));
-    }
+    }*/
   }
 
   int ReplicaPaxos::propose(std::string command){

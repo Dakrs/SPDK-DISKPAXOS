@@ -26,8 +26,11 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} \
         -pthread \
     ")
 
-set(SPDK_DIR $ENV{HOME}/spdk)
+set(SPDK_DIR /home/gsd/spdk)
 set(ENV{PKG_CONFIG_PATH} "${SPDK_DIR}/build/lib/pkgconfig")
+
+message(STATUS "home: ${SPDK_DIR}")
+message(STATUS "foo include dir: ${PKG_CONFIG_PATH}")
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(SPDK_LIBS REQUIRED spdk_nvme spdk_vmd spdk_event)
@@ -43,7 +46,6 @@ add_executable(DiskPaxos
   src/Disk/DiskAccess.cpp
   src/Test/disk_isomorphic_test.cpp
   src/Disk/SPDK_ENV.cpp
-  #src/message.pb.cc
   src/Processes/Leader.cpp
   src/Processes/Replica.cpp
   src/Disk/DiskPaxos.cpp
@@ -113,6 +115,7 @@ add_executable(Reset
   src/Scripts/reset.cpp
   src/Disk/DiskBlock.cpp
   src/Disk/DiskAccess.cpp
+  src/Test/disk_isomorphic_test.cpp
 )
 
 target_include_directories (Reset PUBLIC include)

@@ -25,6 +25,8 @@ extern "C" {
 
 typedef unsigned char byte;
 
+#define CORE 1
+
 int NUM_PROCESSES = 0;
 
 /**
@@ -256,13 +258,25 @@ static void cleanup(void){
 }
 
 static void app_init(void * arg){
-	/**
-	if (spdk_vmd_init()) {
-		fprintf(stderr, "Failed to initialize VMD."
-			" Some NVMe devices can be unavailable.\n");
-	}*/
+	struct spdk_nvme_transport_id connect_id = {};
 
-	int rc = spdk_nvme_probe(NULL, NULL, probe_cb, attach_cb, NULL);
+	char * trid = (char *) arg;
+
+	//"trtype:TCP adrfam:IPv4 traddr:127.0.0.1 trsvcid:4420 subnqn:nqn.2016-06.io.spdk:cnode1"
+	int rc;
+	if (trid != NULL){
+		int trid_flag = spdk_nvme_transport_id_parse(&connect_id,trid);
+		if (trid_flag != 0){
+			fprintf(stderr, "spdk_nvme_transport_id_parse() failed\n");
+			exit(-1);
+		}
+
+		rc = spdk_nvme_probe(&connect_id, NULL, probe_cb, attach_cb, NULL);
+	}
+	else {
+		rc = spdk_nvme_probe(NULL, NULL, probe_cb, attach_cb, NULL);
+	}
+
 	if (rc != 0) {
 		fprintf(stderr, "spdk_nvme_probe() failed\n");
 		cleanup();
@@ -274,13 +288,13 @@ static void app_init(void * arg){
 	std::cout << "Succeded: " << spdk_env_get_core_count() << std::endl;
 }
 
-static void run_spdk_event_framework(){
+static void run_spdk_event_framework(char * trid){
   struct spdk_app_opts app_opts = {};
   spdk_app_opts_init(&app_opts, sizeof(app_opts));
 	app_opts.name = "event_test";
-	app_opts.reactor_mask = "0x2f";
+	app_opts.reactor_mask = "0x02";
 
-  int rc = spdk_app_start(&app_opts, app_init, NULL);
+  int rc = spdk_app_start(&app_opts, app_init, trid);
 
 	if (rc){
 		std::cout << "Error might have occured" << std::endl;
@@ -292,11 +306,11 @@ static void run_spdk_event_framework(){
 	spdk_app_fini();
 }
 
-int spdk_library_start(int n_p) {
+int spdk_library_start(int n_p,char * trid) {
 
 	NUM_PROCESSES = n_p;
 
-	internal_spdk_event_launcher = std::thread(run_spdk_event_framework);
+	internal_spdk_event_launcher = std::thread(run_spdk_event_framework,trid);
 
 	while(!ready);
 
@@ -339,9 +353,7 @@ static void verify_event(void * arg1, void * arg2){
 	if(!cb->status){
 		spdk_nvme_qpair_process_completions(it->second->qpair, 0);
 
-		uint32_t target_core = it->second->internal_id / spdk_env_get_core_count();
-
-		struct spdk_event * e = spdk_event_allocate(target_core,verify_event<T>,cb,NULL);
+		struct spdk_event * e = spdk_event_allocate(CORE,verify_event<T>,cb,NULL);
 		spdk_event_call(e);
 	}
 	else{
@@ -368,9 +380,7 @@ static void write_event(void * arg1, void * arg2){
 				exit(1);
 	}
 
-	uint32_t target_core = it->second->internal_id / spdk_env_get_core_count(); //compute the core where the event should run in order that only 1 thread accesses the NVME QUEUE
-
-	struct spdk_event * e = spdk_event_allocate(target_core,verify_event<void>,cb,NULL);
+	struct spdk_event * e = spdk_event_allocate(CORE,verify_event<void>,cb,NULL);
 	spdk_event_call(e);
 }
 
@@ -401,9 +411,7 @@ std::future<void> write(std::string disk, DiskBlock& db,int k,int p_id){
   cb->callback = std::promise<void>();
   auto future = cb->callback.get_future();
 
-	uint32_t target_core = it->second->internal_id / spdk_env_get_core_count();
-
-	struct spdk_event * e = spdk_event_allocate(target_core,write_event,cb,NULL);
+	struct spdk_event * e = spdk_event_allocate(CORE,write_event,cb,NULL);
 
 	spdk_event_call(e);
 
@@ -431,9 +439,7 @@ static void initialize_event(void * arg1, void * arg2){
 				exit(1);
 	}
 
-	uint32_t target_core = it->second->internal_id / spdk_env_get_core_count(); //compute the core where the event should run in order that only 1 thread accesses the NVME QUEUE
-
-	struct spdk_event * e = spdk_event_allocate(target_core,verify_event<void>,cb,NULL);
+	struct spdk_event * e = spdk_event_allocate(CORE,verify_event<void>,cb,NULL);
 	spdk_event_call(e);
 }
 
@@ -468,9 +474,7 @@ std::future<void> initialize(std::string disk, int size,int offset){
   cb->callback = std::promise<void>();
   auto future = cb->callback.get_future();
 
-	uint32_t target_core = it->second->internal_id / spdk_env_get_core_count();
-
-	struct spdk_event * e = spdk_event_allocate(target_core,initialize_event,cb,NULL);
+	struct spdk_event * e = spdk_event_allocate(CORE,initialize_event,cb,NULL);
 
 	spdk_event_call(e);
 
@@ -522,9 +526,7 @@ static void read_event(void * arg1, void * arg2){
 				exit(1);
 	}
 
-	uint32_t target_core = it->second->internal_id / spdk_env_get_core_count(); //compute the core where the event should run in order that only 1 thread accesses the NVME QUEUE
-
-	struct spdk_event * e = spdk_event_allocate(target_core,verify_event<std::unique_ptr<DiskBlock>>,cb,NULL);
+	struct spdk_event * e = spdk_event_allocate(CORE,verify_event<std::unique_ptr<DiskBlock>>,cb,NULL);
 	spdk_event_call(e);
 }
 
@@ -550,9 +552,7 @@ std::future<std::unique_ptr<DiskBlock>> read(std::string disk,int index){
   cb->callback = std::promise<std::unique_ptr<DiskBlock>>();
   auto future = cb->callback.get_future();
 
-	uint32_t target_core = it->second->internal_id / spdk_env_get_core_count();
-
-	struct spdk_event * e = spdk_event_allocate(target_core,read_event,cb,NULL);
+	struct spdk_event * e = spdk_event_allocate(CORE,read_event,cb,NULL);
 	spdk_event_call(e);
   //delete cb;
 
@@ -608,9 +608,7 @@ static void read_full_event(void * arg1, void * arg2){
 				exit(1);
 	}
 
-	uint32_t target_core = it->second->internal_id / spdk_env_get_core_count(); //compute the core where the event should run in order that only 1 thread accesses the NVME QUEUE
-
-	struct spdk_event * e = spdk_event_allocate(target_core,verify_event<std::unique_ptr<std::vector<std::unique_ptr<DiskBlock>>>>,cb,NULL);
+	struct spdk_event * e = spdk_event_allocate(CORE,verify_event<std::unique_ptr<std::vector<std::unique_ptr<DiskBlock>>>>,cb,NULL);
 	spdk_event_call(e);
 }
 
@@ -635,9 +633,7 @@ std::future<std::unique_ptr<std::vector<std::unique_ptr<DiskBlock>>>> read_full(
 	cb->callback = std::promise< std::unique_ptr<std::vector<std::unique_ptr<DiskBlock>>> >();
   auto future = cb->callback.get_future();
 
-	uint32_t target_core = it->second->internal_id / spdk_env_get_core_count();
-
-	struct spdk_event * e = spdk_event_allocate(target_core,read_full_event,cb,NULL);
+	struct spdk_event * e = spdk_event_allocate(CORE,read_full_event,cb,NULL);
 	spdk_event_call(e);
   //delete cb;
 

@@ -1,12 +1,15 @@
 #ifndef DISKISOMORPHIC_TEST_H
 #define DISKISOMORPHIC_TEST_H
 
+#include <string>
+
 class DiskTest {
   int k;
   int NUM_PROCESSES;
+  std::string addresses;
 
   public:
-    DiskTest(int k, int n_p);
+    DiskTest(int k, int n_p,std::string disk,char * trid);
     ~DiskTest();
     bool single_write_read_test(void);
     bool single_write_read_test(int row,int column);

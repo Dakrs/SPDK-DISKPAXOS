@@ -132,8 +132,7 @@ namespace LeaderPaxos {
           dp = new DiskPaxos::DiskPaxos(p.command,p.slot,this->pid);
           this->slots[i] = dp;
           //DiskPaxos::launch_DiskPaxos(dp,this->pid); // spawns a new instance of the consensus protocol
-          DiskPaxos::launch_DiskPaxos(dp)
-          //should be DiskPaxos::launch_DiskPaxos(dp);
+          DiskPaxos::launch_DiskPaxos(dp);
         }
       }
 

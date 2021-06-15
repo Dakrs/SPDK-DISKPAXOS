@@ -7,7 +7,7 @@
 #include <memory>
 #include <vector>
 
-int spdk_library_start(int n_p);
+int spdk_library_start(int n_p,char * trid);
 void spdk_library_end(void);
 std::future<void> write(std::string disk, DiskBlock& db,int k,int p_id);
 std::future<void> initialize(std::string disk, int size,int offset);

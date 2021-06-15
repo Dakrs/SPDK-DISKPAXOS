@@ -211,7 +211,6 @@ std::thread spawn_process(int pid, int N_LANES){
     ReplicaPaxos::ReplicaPaxos rp(pid);
     rp.run();
     leader_thread.join();
-
   });
 
   return t;
