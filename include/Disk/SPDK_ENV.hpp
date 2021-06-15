@@ -69,6 +69,7 @@ namespace SPDK_ENV {
   extern std::map<std::string,std::unique_ptr<NVME_NAMESPACE_MULTITHREAD>> namespaces;
 
   int spdk_start(int n_p,int n_k,const char * CPU_MASK);
+	int spdk_start(int n_p,int n_k,const char * CPU_MASK,std::vector<std::string>& trids);
   void spdk_end();
   uint32_t allocate_leader_core();
   uint32_t allocate_replica_core();

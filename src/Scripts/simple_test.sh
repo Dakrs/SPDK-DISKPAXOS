@@ -2,7 +2,7 @@
 
 mkdir example_files
 
-python3 ../Scripts/gen_files.py 40 8
+python3 ./gen_files.py 40 8
 
 cp -r example_files ../../build
 
@@ -14,9 +14,9 @@ mkdir output
 
 make
 
-sudo ./Reset 8 10 40
+sudo ./Reset --processes 8 --lanes 10 --proposals 40 --local --diskid 0000:03:00.0
 
-sudo ./DiskPaxos 0 1 2
+sudo ./DiskPaxos_LocalThread 0 1 2
 
 echo "====== Finished script ======"
 

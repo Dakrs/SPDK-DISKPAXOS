@@ -8,17 +8,18 @@ SPDK_DIR=/home/gsd/spdk
 helpFunction()
 {
    echo ""
-   echo "Usage: sudo $0 -m Ox2f -c ./config.json"
+   echo "Usage: sudo $0 -m 0x2f -c ./config.json"
    echo "\t-m CPU mask what will be used"
-   echo "\t-c Path to the configfile"
+   echo "\t-c Path to the config file"
    exit 1 # Exit script after printing help
 }
 
-while getopts "m:c:" opt
+while getopts "m:c:h" opt
 do
    case "$opt" in
       m ) cpu_mask="$OPTARG" ;;
       c ) config="$OPTARG" ;;
+      h ) helpFunction ;;
       ? ) helpFunction ;; # Print helpFunction in case parameter is non-existent
    esac
 done

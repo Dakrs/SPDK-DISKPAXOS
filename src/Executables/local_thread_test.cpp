@@ -1,9 +1,7 @@
 #include <array>
 #include <iostream>
-#include "BankCommand.hpp"
 #include "Disk/DiskBlock.hpp"
 #include <sstream>
-#include <cereal/archives/binary.hpp>
 #include "Disk/DiskAccess.hpp"
 #include <chrono>
 #include <thread>
@@ -223,7 +221,10 @@ int main(int argc, char const *argv[]) {
     return -1;
   }
 
-  SPDK_ENV::spdk_start(N_PROCESSES,N_LANES,"0x2f");
+  //std::vector<std::string> example {"trtype:TCP adrfam:IPv4 traddr:127.0.0.1 trsvcid:4420 subnqn:nqn.2016-06.io.spdk:cnode1"};
+
+  SPDK_ENV::spdk_start(N_PROCESSES,N_LANES,"0x3f");
+
 
   int pid_1 = atoi(argv[1]);
   int pid_2 = atoi(argv[2]);
@@ -236,6 +237,7 @@ int main(int argc, char const *argv[]) {
   ReplicaPaxos::ReplicaPaxos rp(pid);
   rp.run();
   t.join();*/
+
   std::thread t = spawn_process(pid_1,N_LANES);
   std::thread t2 = spawn_process(pid_2,N_LANES);
   std::thread t3 = spawn_process(pid_3,N_LANES);

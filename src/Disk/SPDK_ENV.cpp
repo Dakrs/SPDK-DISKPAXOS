@@ -103,13 +103,52 @@ namespace SPDK_ENV {
   	}
   }
 
+  static bool probe_nvmf(std::vector<std::string> * trids){
+    int successfull_hooks = 0;
+    struct spdk_nvme_transport_id connect_id;
+
+    for(auto s_trids : (*trids)){
+      connect_id = {};
+      const char * trid = s_trids.c_str();
+      int trid_flag = spdk_nvme_transport_id_parse(&connect_id,trid);
+  		if (trid_flag != 0){
+  			fprintf(stderr, "spdk_nvme_transport_id_parse() failed\n");
+        continue;
+  		}
+
+      int rc = spdk_nvme_probe(&connect_id, NULL, probe_cb, attach_cb, NULL);
+
+      if (rc != 0) {
+    		fprintf(stderr, "spdk_nvme_probe() failed\n");
+    	}
+      else{
+        successfull_hooks++;
+      }
+    }
+
+    return successfull_hooks > 0 && trids->size() > 0;
+  }
+
   static void app_init(void * arg){
-  	int rc = spdk_nvme_probe(NULL, NULL, probe_cb, attach_cb, NULL);
-  	if (rc != 0) {
-  		fprintf(stderr, "spdk_nvme_probe() failed\n");
-  		cleanup();
-  		exit(-1);
-  	}
+    int rc;
+    if (arg == NULL){
+      std::cout << "Connecting to local device" << std::endl;
+      rc = spdk_nvme_probe(NULL, NULL, probe_cb, attach_cb, NULL);
+
+      if (rc != 0) {
+        fprintf(stderr, "spdk_nvme_probe() failed\n");
+        spdk_app_stop(0);
+      }
+    }
+    else{
+      std::vector<std::string> * trids = (std::vector<std::string> *) arg;
+      bool status = probe_nvmf(trids);
+
+      if (!status) {
+        fprintf(stderr, "spdk_nvme_probe() failed\n");
+        spdk_app_stop(0);
+      }
+    }
 
   	NEXT_CORE = spdk_env_get_first_core();
   	NEXT_CORE_REPLICA = spdk_env_get_first_core();
@@ -135,6 +174,40 @@ namespace SPDK_ENV {
   	//spdk_vmd_fini();
 
   	spdk_app_fini();
+  }
+
+
+  static void run_spdk_event_framework_nvmf(const char * CPU_MASK, std::vector<std::string> * trids){
+    struct spdk_app_opts app_opts = {};
+    spdk_app_opts_init(&app_opts, sizeof(app_opts));
+    app_opts.name = "event_test";
+    app_opts.reactor_mask = CPU_MASK;
+
+    int rc = spdk_app_start(&app_opts, app_init, trids);
+
+    if (rc){
+      std::cout << "Error might have occured" << std::endl;
+    }
+
+    cleanup();
+    //spdk_vmd_fini();
+
+    spdk_app_fini();
+  }
+
+  int spdk_start(int n_p,int n_k,const char * CPU_MASK,std::vector<std::string>& trids){
+    NUM_PROCESSES = n_p;
+  	NUM_CONCENSOS_LANES = n_k;
+
+    std::vector<std::string> * v_aux = new std::vector<std::string> ();
+    for(auto trid : trids)
+      v_aux->push_back(trid);
+
+    internal_spdk_event_launcher = std::thread(run_spdk_event_framework_nvmf,CPU_MASK, v_aux);
+
+    while(!ready);
+
+    return 0;
   }
 
   int spdk_start(int n_p,int n_k,const char * CPU_MASK) {
