@@ -189,7 +189,7 @@ static bool probe_cb(void *cb_ctx,const struct spdk_nvme_transport_id *trid,stru
   return false;
 }
 
-static int register_ns(struct spdk_nvme_ctrlr *ctrlr,struct spdk_nvme_ns *ns,const struct spdk_nvme_transport_id *trid){
+static int register_ns(struct spdk_nvme_ctrlr *ctrlr,struct spdk_nvme_ns *ns,const struct spdk_nvme_transport_id *trid,int nsid){
   if (!spdk_nvme_ns_is_active(ns)) {
 		return -1;
 	}
@@ -201,11 +201,14 @@ static int register_ns(struct spdk_nvme_ctrlr *ctrlr,struct spdk_nvme_ns *ns,con
     return -1;
   }
 
-  std::string addr(trid->traddr);
+	std::string addr_aux(trid->traddr);
+	std::string addr = addr_aux + "-NS:" + std::to_string(nsid);
+
+	addresses.insert(addr);
   namespaces.insert(std::pair<std::string,std::unique_ptr<NVME_NAMESPACE>>(addr,std::unique_ptr<NVME_NAMESPACE>(my_ns)));
 
-  printf("  Namespace ID: %d size: %juGB %lu i_id: %d\n", spdk_nvme_ns_get_id(ns),
-         spdk_nvme_ns_get_size(ns) / 1000000000, spdk_nvme_ns_get_num_sectors(ns), my_ns->internal_id);
+  printf("  Namespace ID: %d size: %juGB %lu i_id: %d %s\n", spdk_nvme_ns_get_id(ns),
+         spdk_nvme_ns_get_size(ns) / 1000000000, spdk_nvme_ns_get_num_sectors(ns), my_ns->internal_id, addr.c_str());
 
   return 0;
 }
@@ -232,9 +235,7 @@ static void attach_cb( void *cb_ctx, const struct spdk_nvme_transport_id *trid, 
 		if (ns == NULL) {
 			continue;
 		}
-		int res = register_ns(ctrlr, ns, trid);
-    if (!res)
-      break; // só quero o primeiro namespace
+		register_ns(ctrlr, ns, trid,nsid);
 	}
 
   controllers.push_back(std::unique_ptr<NVME_CONTROLER>(current_ctrlr));

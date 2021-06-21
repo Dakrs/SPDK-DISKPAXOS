@@ -45,7 +45,7 @@ namespace DiskPaxos {
   void propose(int pid, int slot, std::string command);
   void propose(int pid, int slot, std::string command,uint32_t target_core);
   std::future<std::unique_ptr<std::map<int,DiskBlock>> > read_proposals(int k,int number_of_slots);
-  std::future<std::unique_ptr<std::map<int,DiskBlock>> > read_proposals(int k,int number_of_slots,uint32_t target_core);
+  std::future<std::unique_ptr<std::map<int,DiskBlock>> > read_proposals(int k,int number_of_slots,int pid);
   std::future<DiskBlock> read_decision(int slot);
   std::future<DiskBlock> read_decision(int slot,uint32_t target_core);
 }

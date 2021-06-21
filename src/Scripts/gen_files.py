@@ -12,7 +12,7 @@ strings = []
 for i in range(0,MAX_NUMBER_STR):
     strings.append(id_generator())
 
-print(strings)
+#print(strings)
 
 NUM_PROCESSES = int(sys.argv[2])
 

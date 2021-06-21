@@ -120,6 +120,7 @@ struct LeaderRead {
 	int status; //0 running, 1 ended;
 	promise< unique_ptr<map<int,DiskBlock >> > callback;
 	uint32_t target_core;
+	int l_pid;
 
 	LeaderRead(
 		int slot,
@@ -128,7 +129,18 @@ struct LeaderRead {
 	): starting_slot(slot), number_of_slots(n_slots), target_core(target_core){
 		this->n_events = 0;
 		this->status = 0;
+		this->l_pid = -1;
 	};
+	LeaderRead(
+		int slot,
+		int n_slots,
+		uint32_t target_core,
+		int pid
+	): starting_slot(slot), number_of_slots(n_slots), target_core(target_core), l_pid(pid){
+		this->n_events = 0;
+		this->status = 0;
+	};
+
 	~LeaderRead(){
 		//cout << "Cleaned" << endl;
 	};
@@ -671,6 +683,18 @@ static void leader_read_completion(void *arg,const struct spdk_nvme_cpl *complet
 	for(int i = 0; i < ld->number_of_slots; i++){
 		it = ld->proposals.find(i + ld->starting_slot);
 		if (it == ld->proposals.end()){ //if the current slot doesn't have a command
+			if (ld->l_pid != -1){
+				string db_serialized = bytes_to_string(ld_opt->buffer + ld_opt->size_elem * (i * SPDK_ENV::NUM_PROCESSES + ld->l_pid)); //buffer to string
+				DiskBlock db;
+				db.deserialize(db_serialized); //inverse of serialize
+
+				if (db.isValid()){
+					ld->proposals.insert(pair<int,DiskBlock>(i + ld->starting_slot,db));
+					break;
+				}
+			}
+
+
 			for (int j = 0; j < SPDK_ENV::NUM_PROCESSES; j++) {
 				string db_serialized = bytes_to_string(ld_opt->buffer + ld_opt->size_elem * (i * SPDK_ENV::NUM_PROCESSES + j)); //buffer to string
 				DiskBlock db;
@@ -752,9 +776,9 @@ std::future<unique_ptr<map<int,DiskBlock>> > DiskPaxos::read_proposals(int k,int
 	return response;
 }
 
-std::future<unique_ptr<map<int,DiskBlock>> > DiskPaxos::read_proposals(int k,int number_of_slots,uint32_t target_core){
-	uint32_t core = target_core;
-	LeaderRead * ld = new LeaderRead(k,number_of_slots,core);
+std::future<unique_ptr<map<int,DiskBlock>> > DiskPaxos::read_proposals(int k,int number_of_slots,int pid){
+	uint32_t core = SPDK_ENV::allocate_leader_core();
+	LeaderRead * ld = new LeaderRead(k,number_of_slots,core,pid);
 
 	ld->callback = promise<unique_ptr< map<int,DiskBlock> >>();
 	auto response = ld->callback.get_future();
@@ -790,7 +814,7 @@ static void read_decision_cleanup(void * arg1, void * arg2){
 	DecisionRead * ld = (DecisionRead * ) arg1;
 
 	if (ld->n_events > 0){
-		struct spdk_event * e = spdk_event_allocate(ld->target_core,LeaderRead_cleanup,ld,NULL);
+		struct spdk_event * e = spdk_event_allocate(ld->target_core,read_decision_cleanup,ld,NULL);
 		spdk_event_call(e);
 	}
 	else{
@@ -807,7 +831,6 @@ static void read_decision_completion(void *arg,const struct spdk_nvme_cpl *compl
 		ld_opt->status = 2;
 		exit(1);
 	}
-
 	DecisionRead * ld = ld_opt->dr;
 
 	if (ld->status){ //already ended the read from a majority of disks

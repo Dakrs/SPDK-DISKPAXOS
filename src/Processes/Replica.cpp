@@ -16,6 +16,10 @@ namespace ReplicaPaxos {
     this->res = DiskPaxos::read_decision(slot);
   }
 
+  Decision::Decision(int slot,int l_core): slot(slot){
+    this->res = DiskPaxos::read_decision(slot,l_core);
+  }
+
   bool Decision::isReady(){
     const auto f_current_state = this->res.wait_until(std::chrono::system_clock::time_point::min());
     return f_current_state == std::future_status::ready;
@@ -30,6 +34,15 @@ namespace ReplicaPaxos {
     this->slot = 0;
     std::string filename = "output/output-" + std::to_string(this->pid);
     this->out = std::ofstream(filename);
+    this->l_core = -1;
+  }
+
+  ReplicaPaxos::ReplicaPaxos(int pid,int l_core){
+    this->pid = pid;
+    this->slot = 0;
+    std::string filename = "output/output-" + std::to_string(this->pid);
+    this->out = std::ofstream(filename);
+    this->l_core = l_core;
   }
 
   ReplicaPaxos::~ReplicaPaxos(){
@@ -42,17 +55,27 @@ namespace ReplicaPaxos {
     std::string filename = "example_files/input-" + std::to_string(this->pid);
     std::ifstream infile(filename);
     std::string line;
+    Decision * d;
 
-    while (std::getline(infile,line)) {
-      int i = this->propose(line);
-      Decision * d = new Decision(i);
-      this->decisionsTosolve.insert(std::unique_ptr<Decision>(d));
-      this->handle_possible_decisions();
-      std::this_thread::sleep_for(100ms);
+    try{
+      while (std::getline(infile,line)) {
+        int i = this->propose(line);
+        if (this->l_core >= 0)
+          d = new Decision(i,this->l_core);
+        else
+          d = new Decision(i);
+
+        this->decisionsTosolve.insert(std::unique_ptr<Decision>(d));
+        this->handle_possible_decisions();
+        std::this_thread::sleep_for(1ms);
+      }
+
+      while(this->decisionsTosolve.size() > 0)
+        this->handle_possible_decisions();
     }
-
-    while(this->decisionsTosolve.size() > 0)
-      this->handle_possible_decisions();
+    catch (std::exception& e){
+      std::cerr << "Exception caught : " << e.what() << std::endl;
+    }
 
     //std::this_thread::sleep_for(2000ms);
     //this->output();
@@ -72,14 +95,6 @@ namespace ReplicaPaxos {
 
         std::string rline = std::to_string(db.slot) + " " + db.input + "\n"; //export to file
         this->out << rline; //export to file
-        //se a proposal existe e se a decisão é diferente da proposta
-
-        /**
-        if (it_map->second != db.input){
-          //propor para um novo slot
-          int n_slot = this->propose(it_map->second);
-          toRestart.push_back(n_slot);
-        }*/
 
         this->proposals.erase(it_map->first);
         this->decisionsTosolve.erase(it++);
@@ -99,7 +114,10 @@ namespace ReplicaPaxos {
   int ReplicaPaxos::propose(std::string command){
     int return_slot = this->slot;
     //DiskPaxos::propose(this->pid,this->slot,command,this->pid); //voltar a propor para um novo slot
-    DiskPaxos::propose(this->pid,this->slot,command); //voltar a propor para um novo slot
+    if (this->l_core >= 0)
+      DiskPaxos::propose(this->pid,this->slot,command,this->l_core); //voltar a propor para um novo slot
+    else
+      DiskPaxos::propose(this->pid,this->slot,command); //voltar a propor para um novo slot
 
     this->proposals.insert(std::pair<int,std::string>(this->slot,command));
     this->slot++;

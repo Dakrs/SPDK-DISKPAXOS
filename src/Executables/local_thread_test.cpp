@@ -204,11 +204,17 @@ std::thread spawn_process(int pid, int N_LANES);
 std::thread spawn_process(int pid, int N_LANES){
   std::thread t([pid,N_LANES](){
 
-    LeaderPaxos::LeaderPaxos lp(pid,N_LANES);
-    std::thread leader_thread(&LeaderPaxos::LeaderPaxos::run,&lp);
-    ReplicaPaxos::ReplicaPaxos rp(pid);
-    rp.run();
-    leader_thread.join();
+    if (pid == 7){
+      LeaderPaxos::LeaderPaxos lp(pid,N_LANES);
+      std::thread leader_thread(&LeaderPaxos::LeaderPaxos::run,&lp);
+      ReplicaPaxos::ReplicaPaxos rp(pid,0);
+      rp.run();
+      leader_thread.join();
+    }
+    else{
+      ReplicaPaxos::ReplicaPaxos rp(pid,0);
+      rp.run();
+    }
   });
 
   return t;
@@ -216,15 +222,21 @@ std::thread spawn_process(int pid, int N_LANES){
 
 int main(int argc, char const *argv[]) {
   int N_PROCESSES = 8, N_LANES = 10;
-  if (argc < 3 || atoi(argv[1]) >= N_PROCESSES || atoi(argv[2]) >= N_PROCESSES){
+  if (argc < 5 || atoi(argv[1]) >= N_PROCESSES || atoi(argv[2]) >= N_PROCESSES){
     std::cout << "Error on args used" << std::endl;
     return -1;
   }
 
   //std::vector<std::string> example {"trtype:TCP adrfam:IPv4 traddr:127.0.0.1 trsvcid:4420 subnqn:nqn.2016-06.io.spdk:cnode1"};
+  std::string cpumask = std::string(argv[4]);
 
-  SPDK_ENV::spdk_start(N_PROCESSES,N_LANES,"0x3f");
+  const char * c_mask = cpumask.c_str();
 
+  std::cout << c_mask << std::endl;
+
+  SPDK_ENV::spdk_start(N_PROCESSES,N_LANES,c_mask);
+
+  SPDK_ENV::print_addresses();
 
   int pid_1 = atoi(argv[1]);
   int pid_2 = atoi(argv[2]);
@@ -238,6 +250,7 @@ int main(int argc, char const *argv[]) {
   rp.run();
   t.join();*/
 
+
   std::thread t = spawn_process(pid_1,N_LANES);
   std::thread t2 = spawn_process(pid_2,N_LANES);
   std::thread t3 = spawn_process(pid_3,N_LANES);
@@ -246,6 +259,7 @@ int main(int argc, char const *argv[]) {
   t2.join();
   t3.join();
   //std::terminate(t);
+
 
   SPDK_ENV::spdk_end();
 

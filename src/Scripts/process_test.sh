@@ -20,9 +20,9 @@ make
 
 sudo ./Reset --processes 8 --lanes 10 --proposals 40 --diskid 127.0.0.1
 
-(sudo ./DiskPaxos_SimpleProcess --processes 8 --lanes 10 --pid 0 --cpumask 0x2) &
-(sudo ./DiskPaxos_SimpleProcess --processes 8 --lanes 10 --pid 1 --cpumask 0x4) &
-(sudo ./DiskPaxos_SimpleProcess --processes 8 --lanes 10 --pid 2 --cpumask 0x10) &
+(sudo ./DiskPaxos_SimpleProcess --processes 8 --lanes 10 --pid 0 --cpumask 0x2 --local) &
+(sudo ./DiskPaxos_SimpleProcess --processes 8 --lanes 10 --pid 1 --cpumask 0x4 --local) &
+(sudo ./DiskPaxos_SimpleProcess --processes 8 --lanes 10 --pid 2 --cpumask 0x10 --local) &
 
 wait
 

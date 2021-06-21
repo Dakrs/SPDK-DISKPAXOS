@@ -73,6 +73,7 @@ namespace SPDK_ENV {
   void spdk_end();
   uint32_t allocate_leader_core();
   uint32_t allocate_replica_core();
+	void print_addresses();
 
 }
 

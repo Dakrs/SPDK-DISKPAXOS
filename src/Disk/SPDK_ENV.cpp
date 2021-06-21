@@ -13,6 +13,7 @@ namespace SPDK_ENV {
   uint32_t NEXT_CORE = 0;
   uint32_t NEXT_CORE_REPLICA = 0;
 
+  std::set<std::string> crtl_addresses;
   std::set<std::string> addresses; //set a string identifying every disk
   std::vector<std::unique_ptr<NVME_CONTROLER_V2>> controllers; //vector with all controller structures allocated
   std::map<std::string,std::unique_ptr<NVME_NAMESPACE_MULTITHREAD>> namespaces; // map of disk id to working namespace
@@ -22,16 +23,16 @@ namespace SPDK_ENV {
 
   static bool probe_cb(void *cb_ctx,const struct spdk_nvme_transport_id *trid,struct spdk_nvme_ctrlr_opts *opts){
     std::string addr(trid->traddr);
-    const bool is_in = addresses.find(addr) != addresses.end();
+    const bool is_in = crtl_addresses.find(addr) != crtl_addresses.end();
 
     if (!is_in){
-      addresses.insert(addr);
+      crtl_addresses.insert(addr);
       std::cout << "Device on addr: " << addr << std::endl;
       return true;
     }
     return false;
   }
-  static int register_ns(struct spdk_nvme_ctrlr *ctrlr,struct spdk_nvme_ns *ns,const struct spdk_nvme_transport_id *trid){
+  static int register_ns(struct spdk_nvme_ctrlr *ctrlr,struct spdk_nvme_ns *ns,const struct spdk_nvme_transport_id *trid,int nsid){
     if (!spdk_nvme_ns_is_active(ns)) {
   		return -1;
   	}
@@ -44,12 +45,14 @@ namespace SPDK_ENV {
   		my_ns->qpairs.insert(std::pair<uint32_t,struct spdk_nvme_qpair	*>(k,spdk_nvme_ctrlr_alloc_io_qpair(ctrlr, NULL, 0)));
   		k = spdk_env_get_next_core(k);
   	}
+    std::string addr_aux(trid->traddr);
+    std::string addr = addr_aux + "-NS:" + std::to_string(nsid);
 
-    std::string addr(trid->traddr);
+    addresses.insert(addr);
     namespaces.insert(std::pair<std::string,std::unique_ptr<NVME_NAMESPACE_MULTITHREAD>>(addr,std::unique_ptr<NVME_NAMESPACE_MULTITHREAD>(my_ns)));
 
-    printf("  Namespace ID: %d size: %juGB %lu \n", spdk_nvme_ns_get_id(ns),
-           spdk_nvme_ns_get_size(ns) / 1000000000, spdk_nvme_ns_get_num_sectors(ns));
+    printf("  Namespace ID: %d size: %juGB %lu %s\n", spdk_nvme_ns_get_id(ns),
+           spdk_nvme_ns_get_size(ns) / 1000000000, spdk_nvme_ns_get_num_sectors(ns),addr.c_str());
 
     return 0;
   }
@@ -75,9 +78,9 @@ namespace SPDK_ENV {
   		if (ns == NULL) {
   			continue;
   		}
-  		int res = register_ns(ctrlr, ns, trid);
-      if (!res)
-        break; // só quero o primeiro namespace
+  		register_ns(ctrlr, ns, trid,nsid);
+      //if (!res)
+        //break; // só quero o primeiro namespace
   	}
 
     controllers.push_back(std::unique_ptr<NVME_CONTROLER_V2>(current_ctrlr));
@@ -155,7 +158,7 @@ namespace SPDK_ENV {
 
   	ready = true;
 
-  	std::cout << "Succeded: " << spdk_env_get_core_count() << std::endl;
+  	std::cout << "Succeded: CPU_CORES -> " << spdk_env_get_core_count() << std::endl;
   }
 
   static void run_spdk_event_framework(const char * CPU_MASK){
@@ -244,5 +247,13 @@ namespace SPDK_ENV {
       NEXT_CORE_REPLICA = spdk_env_get_first_core();
     }
     return core;
+  }
+
+  void print_addresses(){
+    std::cout << "Addresses: " << std::endl;
+    for(auto str: addresses){
+      std::cout << str << ' ';
+    }
+    std::cout << std::endl;
   }
 }

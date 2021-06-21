@@ -115,6 +115,7 @@ namespace LeaderPaxos {
     while(true){
       this->search(); //search for incoming proposals;
 
+      
       for (int i = 0; i < this->NUM_LANES; i++) {
         DiskPaxos::DiskPaxos * dp = this->slots[i];
         //se estiver livre ou se já tiver terminado

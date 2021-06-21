@@ -16,10 +16,12 @@
 namespace ReplicaPaxos {
   class Decision {
     std::future<DiskBlock> res;
+    int l_core;
 
     public:
       const int slot;
       Decision(int slot);
+      Decision(int slot,int l_core);
       bool isReady();
       DiskBlock get();
   };
@@ -31,10 +33,12 @@ namespace ReplicaPaxos {
     std::set<std::unique_ptr<Decision>> decisionsTosolve;
     int slot;
     int pid;
+    int l_core;
     std::ofstream out;
 
     public:
       ReplicaPaxos(int pid);
+      ReplicaPaxos(int pid,int l_core);
       ~ReplicaPaxos();
       void run();
       void output();
