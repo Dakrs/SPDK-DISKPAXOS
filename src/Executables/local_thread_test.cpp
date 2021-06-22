@@ -204,17 +204,11 @@ std::thread spawn_process(int pid, int N_LANES);
 std::thread spawn_process(int pid, int N_LANES){
   std::thread t([pid,N_LANES](){
 
-    if (pid == 7){
-      LeaderPaxos::LeaderPaxos lp(pid,N_LANES);
-      std::thread leader_thread(&LeaderPaxos::LeaderPaxos::run,&lp);
-      ReplicaPaxos::ReplicaPaxos rp(pid,0);
-      rp.run();
-      leader_thread.join();
-    }
-    else{
-      ReplicaPaxos::ReplicaPaxos rp(pid,0);
-      rp.run();
-    }
+    LeaderPaxos::LeaderPaxos lp(pid,N_LANES);
+    std::thread leader_thread(&LeaderPaxos::LeaderPaxos::run,&lp);
+    ReplicaPaxos::ReplicaPaxos rp(pid,0);
+    rp.run();
+    leader_thread.join();
   });
 
   return t;

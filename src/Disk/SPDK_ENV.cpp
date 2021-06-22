@@ -22,6 +22,7 @@ namespace SPDK_ENV {
   std::thread internal_spdk_event_launcher; //internal thread to coordinate spdk.
 
   static bool probe_cb(void *cb_ctx,const struct spdk_nvme_transport_id *trid,struct spdk_nvme_ctrlr_opts *opts){
+    /**
     std::string addr(trid->traddr);
     const bool is_in = crtl_addresses.find(addr) != crtl_addresses.end();
 
@@ -29,8 +30,8 @@ namespace SPDK_ENV {
       crtl_addresses.insert(addr);
       std::cout << "Device on addr: " << addr << std::endl;
       return true;
-    }
-    return false;
+    }*/
+    return true;
   }
   static int register_ns(struct spdk_nvme_ctrlr *ctrlr,struct spdk_nvme_ns *ns,const struct spdk_nvme_transport_id *trid,int nsid){
     if (!spdk_nvme_ns_is_active(ns)) {
@@ -45,8 +46,16 @@ namespace SPDK_ENV {
   		my_ns->qpairs.insert(std::pair<uint32_t,struct spdk_nvme_qpair	*>(k,spdk_nvme_ctrlr_alloc_io_qpair(ctrlr, NULL, 0)));
   		k = spdk_env_get_next_core(k);
   	}
-    std::string addr_aux(trid->traddr);
-    std::string addr = addr_aux + "-NS:" + std::to_string(nsid);
+
+    std::string addr;
+
+    if (strlen(trid->subnqn) == 0){
+      std::string addr_aux(trid->traddr);
+      addr = addr_aux + "-NS:" + std::to_string(nsid);
+    }
+    else{
+      addr = std::string(trid->subnqn);
+    }
 
     addresses.insert(addr);
     namespaces.insert(std::pair<std::string,std::unique_ptr<NVME_NAMESPACE_MULTITHREAD>>(addr,std::unique_ptr<NVME_NAMESPACE_MULTITHREAD>(my_ns)));
@@ -118,6 +127,8 @@ namespace SPDK_ENV {
   			fprintf(stderr, "spdk_nvme_transport_id_parse() failed\n");
         continue;
   		}
+
+      std::cout << "trid: " << trid << '\n';
 
       int rc = spdk_nvme_probe(&connect_id, NULL, probe_cb, attach_cb, NULL);
 

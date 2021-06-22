@@ -66,6 +66,7 @@ namespace LeaderPaxos {
 
     auto res = this->props.get();
 
+    // para terminar os lideres, após 5s sem propostas os líderes acabam de correr.
     if (res->size() > 0){
       this->last_proposal_found = std::chrono::high_resolution_clock::now();
     }
@@ -115,7 +116,7 @@ namespace LeaderPaxos {
     while(true){
       this->search(); //search for incoming proposals;
 
-      
+
       for (int i = 0; i < this->NUM_LANES; i++) {
         DiskPaxos::DiskPaxos * dp = this->slots[i];
         //se estiver livre ou se já tiver terminado

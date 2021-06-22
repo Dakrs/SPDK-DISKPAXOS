@@ -58,6 +58,8 @@ int main(int argc, char *argv[]) {
   bool local = false;
 
   std::string disk_string = "";
+  std::string subnqn = "";
+  std::string port = "";
 
   const struct option longopts[] =
   {
@@ -67,6 +69,8 @@ int main(int argc, char *argv[]) {
     {"local",no_argument,0, 'b'},
     {"diskid",required_argument,0,'i'},
     {"help",no_argument,0,'h'},
+    {"subnqn",required_argument,0,'s'},
+    {"port",required_argument,0,'o'},
     {0,0,0,0},
   };
 
@@ -101,6 +105,14 @@ int main(int argc, char *argv[]) {
           disk_string = std::string(optarg);
           std::cout << "DiskString: " << disk_string << std::endl;
           break;
+      case 's':
+          subnqn = std::string(optarg);
+          std::cout << "subnqn: " << subnqn << std::endl;
+          break;
+      case 'o':
+          port = std::string(optarg);
+          std::cout << "port: " << port << std::endl;
+          break;
       case 'h':
           helpFunction();
           exit(1);
@@ -124,7 +136,8 @@ int main(int argc, char *argv[]) {
     trid = NULL;
   }
   else{
-    strcpy(trid,"trtype:TCP adrfam:IPv4 traddr:127.0.0.1 trsvcid:4420 subnqn:nqn.2016-06.io.spdk:cnode1");
+    snprintf(trid,300,"trtype:TCP adrfam:IPv4 traddr:127.0.0.1 trsvcid:%s subnqn:%s",port.c_str(),subnqn.c_str());
+    //strcpy(trid,"trtype:TCP adrfam:IPv4 traddr:127.0.0.1 trsvcid:4421 subnqn:nqn.2016-06.io.spdk:cnode2");
   }
 
   res = spdk_library_start(N_PROCESSES,trid);
@@ -133,6 +146,7 @@ int main(int argc, char *argv[]) {
     std::cout << "Error initializing spdk" << '\n';
     exit(-1);
   }
+
 
   auto f = initialize(disk_string, N_PROCESSES*N_LANES , 0); //reset blocks
   f.get();

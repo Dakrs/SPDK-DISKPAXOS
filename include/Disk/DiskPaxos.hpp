@@ -17,7 +17,7 @@ namespace DiskPaxos {
     public:
       int tick;
       int phase;
-      int status; //0 okay, 1 completed, 2 cancel
+      int status; //0 okay, 1 completed, 2 cancel,3 slot antigo mas continua
       int slot;
       int pid;
       int nextBallot;
@@ -38,6 +38,7 @@ namespace DiskPaxos {
       void Abort(int mbal);
       void phase2();
       void Commit();
+      void SkipLateLeader(int mbal);
   };
 
   void launch_DiskPaxos(DiskPaxos * dp);

@@ -346,8 +346,9 @@ static void read_complete(void *arg,const struct spdk_nvme_cpl *completion){
 					}
 				}
 				else {
+					int mbal = db->mbal;
 					delete db;
-					dp->Cancel();
+					dp->SkipLateLeader(mbal);
 					break;
 				}
 			}
@@ -469,6 +470,26 @@ static void cleanup(void * arg1, void * arg2){
 void DiskPaxos::DiskPaxos::Cancel(){
 	this->tick++;
 	this->status = 2;
+
+	//spawn event de cleanup
+	this->finished = 2;
+	struct spdk_event * e = spdk_event_allocate(this->target_core,cleanup,this,NULL);
+	spdk_event_call(e);
+}
+/*
+ 	Function used went a newer slot is found.
+ */
+void DiskPaxos::DiskPaxos::SkipLateLeader(int mbal){
+	this->tick++;
+
+	int pid_responsible = mbal % SPDK_ENV::NUM_PROCESSES;
+
+	if (pid_responsible < this->pid){
+		this->status = 3;// Estou atrasado mas ainda posso ser líder.
+	}
+	else{ // tenho a certeza que não vou ser lider
+		this->status = 2;
+	}
 
 	//spawn event de cleanup
 	this->finished = 2;

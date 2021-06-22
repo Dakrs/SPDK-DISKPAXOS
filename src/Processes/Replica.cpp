@@ -60,6 +60,7 @@ namespace ReplicaPaxos {
     try{
       while (std::getline(infile,line)) {
         int i = this->propose(line);
+        
         if (this->l_core >= 0)
           d = new Decision(i,this->l_core);
         else

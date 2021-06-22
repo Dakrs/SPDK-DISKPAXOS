@@ -201,8 +201,15 @@ static int register_ns(struct spdk_nvme_ctrlr *ctrlr,struct spdk_nvme_ns *ns,con
     return -1;
   }
 
-	std::string addr_aux(trid->traddr);
-	std::string addr = addr_aux + "-NS:" + std::to_string(nsid);
+	std::string addr;
+
+	if (strlen(trid->subnqn) == 0){
+		std::string addr_aux(trid->traddr);
+		addr = addr_aux + "-NS:" + std::to_string(nsid);
+	}
+	else{
+		addr = std::string(trid->subnqn);
+	}
 
 	addresses.insert(addr);
   namespaces.insert(std::pair<std::string,std::unique_ptr<NVME_NAMESPACE>>(addr,std::unique_ptr<NVME_NAMESPACE>(my_ns)));

@@ -127,7 +127,9 @@ int main(int argc, char *argv[]) {
     SPDK_ENV::spdk_start(N_PROCESSES,N_LANES,c_mask);
   }
   else{
-    std::vector<std::string> trids {"trtype:TCP adrfam:IPv4 traddr:127.0.0.1 trsvcid:4420 subnqn:nqn.2016-06.io.spdk:cnode1"};
+    std::vector<std::string> trids {
+      "trtype:TCP adrfam:IPv4 traddr:127.0.0.1 trsvcid:4422 subnqn:nqn.2014-08.org.nvmexpress.discovery"
+    };
     SPDK_ENV::spdk_start(N_PROCESSES,N_LANES,c_mask,trids);
   }
 
