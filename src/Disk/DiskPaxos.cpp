@@ -312,7 +312,7 @@ static void read_complete(void *arg,const struct spdk_nvme_cpl *completion){
 	DiskOperation * dO = (DiskOperation *) arg;
 
 	if (spdk_nvme_cpl_is_error(completion)) {
-		fprintf(stderr, "I/O error status: %s\n", spdk_nvme_cpl_get_status_string(&completion->status));
+		fprintf(stderr, "I/O error status: %s on read_complete\n", spdk_nvme_cpl_get_status_string(&completion->status));
 		fprintf(stderr, "Write I/O failed, aborting run\n");
 		dO->status = 2;
 		exit(1);
@@ -382,13 +382,16 @@ static void read_full_line(string disk_id,int tick,DiskPaxos::DiskPaxos * dp){
 	DiskOperation * dO = new DiskOperation(disk_id,tick,BUFFER_SIZE,dp,dp->target_core); // read data object
 	dO->buffer = (DiskPaxos::byte *) spdk_zmalloc(BUFFER_SIZE * SPDK_ENV::NUM_PROCESSES, 0x1000, NULL, SPDK_ENV_SOCKET_ID_ANY, SPDK_MALLOC_DMA);
 
+	if (dO->buffer == NULL)
+		fprintf(stderr, "NULL Buffer on read_full_line\n");
+
 	int rc = spdk_nvme_ns_cmd_read(it->second->ns, it_qpair->second , dO->buffer,
 						LBA_INDEX, /* LBA start */
 						SPDK_ENV::NUM_PROCESSES, /* number of LBAs */
 						read_complete, dO, 0); //submit a write operation to NVME
 
 	if (rc != 0) {
-			fprintf(stderr, "starting write I/O failed\n");
+			SPDK_ENV::error_on_cmd_submit(rc,"read_full_line","read");
 			exit(1);
 	}
 
@@ -401,7 +404,7 @@ static void write_complete(void *arg,const struct spdk_nvme_cpl *completion){
 	DiskOperation * dO = (DiskOperation *) arg;
 
 	if (spdk_nvme_cpl_is_error(completion)) {
-		fprintf(stderr, "I/O error status: %s\n", spdk_nvme_cpl_get_status_string(&completion->status));
+		fprintf(stderr, "I/O error status: %s on write_complete\n", spdk_nvme_cpl_get_status_string(&completion->status));
 		fprintf(stderr, "Write I/O failed, aborting run\n");
 		dO->status = 2;
 		exit(1);
@@ -435,13 +438,16 @@ void DiskPaxos::DiskPaxos::ReadAndWrite(){
 
 			it_qpair = it->second->qpairs.find(this->target_core);
 
+			if (dO->buffer == NULL) //apagar depois
+				fprintf(stderr, "NULL Buffer on ReadAndWrite\n");
+
 			int rc = spdk_nvme_ns_cmd_write(it->second->ns, it_qpair->second , dO->buffer,
 								LBA_INDEX, /* LBA start */
 								1, /* number of LBAs */
 								write_complete, dO, 0); //submit a write operation to NVME
 
 			if (rc != 0) {
-					fprintf(stderr, "starting write I/O failed\n");
+					SPDK_ENV::error_on_cmd_submit(rc,"ReadAndWrite","write");
 					exit(1);
 			}
 
@@ -514,7 +520,7 @@ static void write_commit_complete(void *arg,const struct spdk_nvme_cpl *completi
 	DiskOperation * dO = (DiskOperation *) arg;
 
 	if (spdk_nvme_cpl_is_error(completion)) {
-		fprintf(stderr, "I/O error status: %s\n", spdk_nvme_cpl_get_status_string(&completion->status));
+		fprintf(stderr, "I/O error status: %s write_commit_complete\n", spdk_nvme_cpl_get_status_string(&completion->status));
 		fprintf(stderr, "Write I/O failed, aborting run\n");
 		dO->status = 2;
 		exit(1);
@@ -558,14 +564,17 @@ void DiskPaxos::DiskPaxos::Commit(){
 
 			it_qpair = it->second->qpairs.find(this->target_core);
 
+			if (dO->buffer == NULL) //apagar depois
+				fprintf(stderr, "NULL Buffer on Commit\n");
+
 			int rc = spdk_nvme_ns_cmd_write(it->second->ns, it_qpair->second , dO->buffer,
 								LBA_INDEX, /* LBA start */
 								1, /* number of LBAs */
 								write_commit_complete, dO, 0); //submit a write operation to NVME
 
 			if (rc != 0) {
-					fprintf(stderr, "starting write I/O failed\n");
-					exit(1);
+				SPDK_ENV::error_on_cmd_submit(rc,"Commit","write");
+				exit(1);
 			}
 
 			this->n_events++;
@@ -579,7 +588,7 @@ static void simple_write_complete(void *arg,const struct spdk_nvme_cpl *completi
 	DiskOperation * dO = (DiskOperation *) arg;
 
 	if (spdk_nvme_cpl_is_error(completion)) {
-		fprintf(stderr, "I/O error status: %s\n", spdk_nvme_cpl_get_status_string(&completion->status));
+		fprintf(stderr, "I/O error status: %s  simple_write_complete\n", spdk_nvme_cpl_get_status_string(&completion->status));
 		fprintf(stderr, "Write I/O failed, aborting run\n");
 		dO->status = 2;
 		exit(1);
@@ -614,13 +623,16 @@ static void internal_proposal(void * arg1, void * arg2){
 
 			it_qpair = it->second->qpairs.find(props->target_core);
 
+			if (dO->buffer == NULL) //apagar depois
+				fprintf(stderr, "NULL Buffer on Proposal\n");
+
 			int rc = spdk_nvme_ns_cmd_write(it->second->ns, it_qpair->second , dO->buffer,
 								LBA_INDEX, /* LBA start */
 								1, /* number of LBAs */
 								simple_write_complete, dO, SPDK_NVME_IO_FLAGS_FORCE_UNIT_ACCESS); //submit a write operation to NVME
 
 			if (rc != 0) {
-					fprintf(stderr, "starting write I/O failed\n");
+					SPDK_ENV::error_on_cmd_submit(rc,"Proposal","write");
 					exit(1);
 			}
 
@@ -684,7 +696,7 @@ static void leader_read_completion(void *arg,const struct spdk_nvme_cpl *complet
 	LeaderReadOpt * ld_opt = (LeaderReadOpt *) arg;
 
 	if (spdk_nvme_cpl_is_error(completion)) {
-		fprintf(stderr, "I/O error status: %s\n", spdk_nvme_cpl_get_status_string(&completion->status));
+		fprintf(stderr, "I/O error status: %s leader_read_completion\n", spdk_nvme_cpl_get_status_string(&completion->status));
 		fprintf(stderr, "Write I/O failed, aborting run\n");
 		ld_opt->status = 2;
 		exit(1);
@@ -766,13 +778,16 @@ static void read_list_proposals(void * arg1,void * arg2){
 			ld_opt->buffer = (DiskPaxos::byte *) spdk_zmalloc(BUFFER_SIZE * ld->number_of_slots * SPDK_ENV::NUM_PROCESSES, 0x1000, NULL, SPDK_ENV_SOCKET_ID_ANY, SPDK_MALLOC_DMA);
 			it_qpair = it->second->qpairs.find(ld_opt->target_core);
 
+			if (ld_opt->buffer == NULL) //apagar depois
+				fprintf(stderr, "NULL Buffer on read_list_proposals\n");
+
 			int rc = spdk_nvme_ns_cmd_read(it->second->ns, it_qpair->second , ld_opt->buffer,
 								LBA_INDEX,
 								SPDK_ENV::NUM_PROCESSES*ld->number_of_slots,
 								leader_read_completion, ld_opt,0);
 
 			if (rc != 0) {
-					fprintf(stderr, "starting write I/O failed\n");
+					SPDK_ENV::error_on_cmd_submit(rc,"read_list_proposals","read");
 					exit(1);
 			}
 
@@ -820,13 +835,16 @@ static void read_decision_repeat(DecisionReadOpt * dO){
 	it = SPDK_ENV::namespaces.find(dO->disk_id);
 	it_qpair = it->second->qpairs.find(dO->target_core);
 
+	if (dO->buffer == NULL) //apagar depois
+		fprintf(stderr, "NULL Buffer on read_decision_repeat\n");
+
 	int rc = spdk_nvme_ns_cmd_read(it->second->ns, it_qpair->second , dO->buffer,
 						LBA_INDEX,
 						1,
 						read_decision_completion, dO,0);
 
 	if (rc != 0) {
-			fprintf(stderr, "starting write I/O failed\n");
+			SPDK_ENV::error_on_cmd_submit(rc,"read_decision_repeat","read");
 			exit(1);
 	}
 }
@@ -847,7 +865,7 @@ static void read_decision_completion(void *arg,const struct spdk_nvme_cpl *compl
 	DecisionReadOpt * ld_opt = (DecisionReadOpt *) arg;
 
 	if (spdk_nvme_cpl_is_error(completion)) {
-		fprintf(stderr, "I/O error status: %s\n", spdk_nvme_cpl_get_status_string(&completion->status));
+		fprintf(stderr, "I/O error status: %s read_decision_completion\n", spdk_nvme_cpl_get_status_string(&completion->status));
 		fprintf(stderr, "Write I/O failed, aborting run\n");
 		ld_opt->status = 2;
 		exit(1);
@@ -919,14 +937,17 @@ static void read_decision_event(void * arg1,void * arg2){
 			ld_opt->buffer = (DiskPaxos::byte *) spdk_zmalloc(BUFFER_SIZE, 0x1000, NULL, SPDK_ENV_SOCKET_ID_ANY, SPDK_MALLOC_DMA);
 			it_qpair = it->second->qpairs.find(ld_opt->target_core);
 
+			if (ld_opt->buffer == NULL) //apagar depois
+				fprintf(stderr, "NULL Buffer on read_decision_event\n");
+
 			int rc = spdk_nvme_ns_cmd_read(it->second->ns, it_qpair->second , ld_opt->buffer,
 								LBA_INDEX,
 								1,
 								read_decision_completion, ld_opt,0);
 
 			if (rc != 0) {
-					fprintf(stderr, "starting write I/O failed\n");
-					exit(1);
+				SPDK_ENV::error_on_cmd_submit(rc,"read_decision_event","read");
+				exit(1);
 			}
 
 			ld->n_events++;

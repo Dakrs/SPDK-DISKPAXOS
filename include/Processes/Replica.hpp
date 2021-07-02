@@ -34,7 +34,6 @@ namespace ReplicaPaxos {
     int slot;
     int pid;
     int l_core;
-    std::ofstream out;
 
     public:
       ReplicaPaxos(int pid);

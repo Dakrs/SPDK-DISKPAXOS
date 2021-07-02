@@ -267,4 +267,23 @@ namespace SPDK_ENV {
     }
     std::cout << std::endl;
   }
+
+  void error_on_cmd_submit(int code, std::string func, std::string type){
+    switch (code) {
+      case -EINVAL:
+        fprintf(stderr, "starting %s I/O failed on %s because The request is malformed\n",type.c_str(),func.c_str());
+        break;
+      case -ENOMEM:
+        fprintf(stderr, "starting %s I/O failed on %s because The request cannot be allocated\n",type.c_str(),func.c_str());
+        break;
+      case -ENXIO:
+        fprintf(stderr, "starting %s I/O failed on %s because The qpair is failed at the transport level\n",type.c_str(),func.c_str());
+        break;
+      case -EFAULT:
+        fprintf(stderr, "starting %s I/O failed on %s because Invalid address was specified as part of payload\n",type.c_str(),func.c_str());
+        break;
+      default:
+        break;
+    }
+  }
 }

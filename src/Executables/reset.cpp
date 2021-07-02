@@ -150,10 +150,28 @@ int main(int argc, char *argv[]) {
 
   auto f = initialize(disk_string, N_PROCESSES*N_LANES , 0); //reset blocks
   f.get();
+  std::cout << "Consensus blocks reseted" << '\n';
   auto f1 = initialize(disk_string, N_PROPOSALS , N_PROCESSES*N_LANES); //decisions
   f1.get();
-  auto f2 = initialize(disk_string, N_PROCESSES*N_PROPOSALS , 5000000 + N_PROCESSES*N_LANES); //proposals
-  f2.get();
+  std::cout << "Decision blocks reseted" << '\n';
+
+  if (N_PROCESSES*N_PROPOSALS > 512){
+    int n_blocks = 512;
+    int m_div = N_PROCESSES*N_PROPOSALS / n_blocks;
+    int remaining = N_PROCESSES*N_PROPOSALS % n_blocks;
+    int i = 0;
+    for (i = 0; i < m_div; i++) {
+      auto f2 = initialize(disk_string, n_blocks , 5000000 + N_PROCESSES*N_LANES + i*n_blocks); //proposals
+      f2.get();
+    }
+    auto f4 = initialize(disk_string, remaining , 5000000 + N_PROCESSES*N_LANES + i*n_blocks); //proposals
+    f4.get();
+  }
+  else{
+    auto f3 = initialize(disk_string, N_PROCESSES*N_PROPOSALS , 5000000 + N_PROCESSES*N_LANES); //proposals
+    f3.get();
+  }
+  std::cout << "Proposals blocks reseted" << '\n';
 
   //DiskTest disktest(20,4,argv[4],"trtype:TCP adrfam:IPv4 traddr:127.0.0.1 trsvcid:4420 subnqn:nqn.2016-06.io.spdk:cnode1"); //lanes, n_processes
   //disktest.run_every_test(1000);

@@ -39,7 +39,7 @@ namespace LeaderPaxos {
   void LeaderPaxos::search(){
     if (!this->searching){
       this->searching = true;
-      this->props = DiskPaxos::read_proposals(this->latest_slot,2);
+      this->props = DiskPaxos::read_proposals(this->latest_slot,this->NUM_LANES);
     }
 
     const auto f_current_state = this->props.wait_until(std::chrono::system_clock::time_point::min());
@@ -137,6 +137,8 @@ namespace LeaderPaxos {
           DiskPaxos::launch_DiskPaxos(dp);
         }
       }
+
+      this->cleanup(); //clean up old consensus
 
       if (this->aborting){
         break;

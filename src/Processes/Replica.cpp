@@ -32,21 +32,16 @@ namespace ReplicaPaxos {
   ReplicaPaxos::ReplicaPaxos(int pid){
     this->pid = pid;
     this->slot = 0;
-    std::string filename = "output/output-" + std::to_string(this->pid);
-    this->out = std::ofstream(filename);
     this->l_core = -1;
   }
 
   ReplicaPaxos::ReplicaPaxos(int pid,int l_core){
     this->pid = pid;
     this->slot = 0;
-    std::string filename = "output/output-" + std::to_string(this->pid);
-    this->out = std::ofstream(filename);
     this->l_core = l_core;
   }
 
   ReplicaPaxos::~ReplicaPaxos(){
-    this->out.close();
   }
 
   void ReplicaPaxos::run(){
@@ -60,7 +55,7 @@ namespace ReplicaPaxos {
     try{
       while (std::getline(infile,line)) {
         int i = this->propose(line);
-        
+
         if (this->l_core >= 0)
           d = new Decision(i,this->l_core);
         else
@@ -68,11 +63,14 @@ namespace ReplicaPaxos {
 
         this->decisionsTosolve.insert(std::unique_ptr<Decision>(d));
         this->handle_possible_decisions();
-        std::this_thread::sleep_for(1ms);
+        std::this_thread::sleep_for(5ms);
       }
 
       while(this->decisionsTosolve.size() > 0)
         this->handle_possible_decisions();
+      std::cout << "Replica quiting after n_props: " << this->slot << " decisons size: " << this->decisions.size() << '\n';
+      std::cout << "Logging results " << std::endl;
+      this->output();
     }
     catch (std::exception& e){
       std::cerr << "Exception caught : " << e.what() << std::endl;
@@ -93,9 +91,6 @@ namespace ReplicaPaxos {
         it_map = this->proposals.find(db.slot);
 
         this->decisions.insert(std::pair<int,std::string>(db.slot,db.input));
-
-        std::string rline = std::to_string(db.slot) + " " + db.input + "\n"; //export to file
-        this->out << rline; //export to file
 
         this->proposals.erase(it_map->first);
         this->decisionsTosolve.erase(it++);
@@ -126,8 +121,14 @@ namespace ReplicaPaxos {
   }
 
   void ReplicaPaxos::output(){
+    std::string filename = "output/output-" + std::to_string(this->pid);
+    std::ofstream out(filename);
+
     for (auto & [slot, dec] : this->decisions){
-      std::cout << "KEY: " << slot << " " << "Decision: " << dec << std::endl;
+      std::string rline = std::to_string(slot) + " " + dec + "\n"; //export to file
+      out << rline; //export to file
     }
+
+    out.close();
   }
 }

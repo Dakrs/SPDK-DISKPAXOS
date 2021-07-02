@@ -74,7 +74,7 @@ namespace SPDK_ENV {
   uint32_t allocate_leader_core();
   uint32_t allocate_replica_core();
 	void print_addresses();
-
+	void error_on_cmd_submit(int code, std::string func, std::string type);
 }
 
 #endif

@@ -443,8 +443,23 @@ static void initialize_event(void * arg1, void * arg2){
 						write_complete, cb, SPDK_NVME_IO_FLAGS_FORCE_UNIT_ACCESS); //submit a write operation to NVME
 
 	if (rc != 0) {
-				fprintf(stderr, "starting write I/O failed\n");
-				exit(1);
+		switch (rc) {
+			case -EINVAL:
+				fprintf(stderr, "starting %s I/O failed on %s because The request is malformed\n","write","initialize");
+				break;
+			case -ENOMEM:
+				fprintf(stderr, "starting %s I/O failed on %s because The request cannot be allocated\n","write","initialize");
+				break;
+			case -ENXIO:
+				fprintf(stderr, "starting %s I/O failed on %s because The qpair is failed at the transport level\n","write","initialize");
+				break;
+			case -EFAULT:
+				fprintf(stderr, "starting %s I/O failed on %s because Invalid address was specified as part of payload\n","write","initialize");
+				break;
+			default:
+				break;
+		}
+		exit(1);
 	}
 
 	struct spdk_event * e = spdk_event_allocate(CORE,verify_event<void>,cb,NULL);
@@ -461,13 +476,10 @@ std::future<void> initialize(std::string disk, int size,int offset){
 
   size_t BUFFER_SIZE = (it->second->lbaf + it->second->metadata_size);
 
-	/**
-	DiskBlock db = DiskBlock();
-  std::string db_serialized = db.serialize();*/
-
   byte * buffer = (byte *) spdk_zmalloc(BUFFER_SIZE * size, 0x1000, NULL, SPDK_ENV_SOCKET_ID_ANY, SPDK_MALLOC_DMA);
 
   if (buffer == NULL) {
+		std::cout << "buffer is null" << '\n';
     throw std::bad_alloc();
   }
 
