@@ -32,6 +32,7 @@ using namespace std;
 
 static void read_decision_cleanup(void * arg1, void * arg2);
 static void read_decision_completion(void *arg,const struct spdk_nvme_cpl *completion);
+static void read_multiple_decision_cleanup(void * arg1, void * arg2);
 
 struct DiskOperation {
 	string disk_id; //disk id
@@ -73,6 +74,73 @@ struct Proposal {
 
 	Proposal(int pid,int slot, string command, uint32_t target_core): pid(pid), slot(slot), command(command), target_core(target_core) {};
 	~Proposal(){};
+};
+/**
+struct MultiProposal {
+	int pid;
+	int starting_slot;
+	vector<string> commands;
+	uint32_t target_core;
+
+	MultiProposal(int pid,int slot, vector<string> s_command, uint32_t target_core): pid(pid), starting_slot(slot), target_core(target_core) {
+		commands = s_command;
+	};
+	~MultiProposal(){};
+};*/
+
+struct MultipleDecisionRead {
+	int starting_slot;
+	int amount;
+	uint32_t target_core;
+	int status;
+	map<int,DiskBlock> decisions;
+	promise< unique_ptr<map<int,DiskBlock>> > callback;
+	set<string> disksSeen;
+	int n_events;
+
+	MultipleDecisionRead(int start, int size, uint32_t core){
+		this->starting_slot = start;
+		this->amount = size;
+		this->status = 0;
+		this->target_core = core;
+		this->n_events = 0;
+	};
+
+	bool should_deliver(){
+		if (this->disksSeen.size() > (SPDK_ENV::addresses.size() / 2))
+			return true;
+		return false;
+	};
+
+	void deliver(){
+		this->status = 1;
+		auto res = new map<int,DiskBlock>(this->decisions);
+		this->callback.set_value(unique_ptr<map<int,DiskBlock>>(res));
+
+		struct spdk_event * e = spdk_event_allocate(this->target_core,read_multiple_decision_cleanup,this,NULL);
+		spdk_event_call(e);
+	}
+
+	~MultipleDecisionRead(){};
+};
+
+struct MultipleDecisionReadOpt {
+	string disk_id; //identifier of a disk
+	size_t size_elem; //block size supported
+	int status; //current status, 0 running, 1 finished
+	uint32_t target_core; // allocated core
+	DiskPaxos::byte * buffer; //buffer used for the opt
+	MultipleDecisionRead * dr; //master object for read
+
+	MultipleDecisionReadOpt(
+		string disk_id,
+		size_t size_e,
+		uint32_t target_core,
+		MultipleDecisionRead * dr_p
+	): disk_id(disk_id), size_elem(size_e),target_core(target_core), dr(dr_p){
+		this->status = 0;
+	};
+	~MultipleDecisionReadOpt(){};
 };
 
 struct DecisionRead {
@@ -141,9 +209,7 @@ struct LeaderRead {
 		this->status = 0;
 	};
 
-	~LeaderRead(){
-		//cout << "Cleaned" << endl;
-	};
+	~LeaderRead(){};
 };
 
 /**
@@ -168,8 +234,125 @@ struct LeaderReadOpt {
 	};
 	~LeaderReadOpt(){};
 };
+/**
+struct SGL_Proposal {
+	string disk_id; //identifier of a disk
+	int size_elem; //block size supported
+	int status; //current status, 0 running, 1 finished
+	uint32_t target_core; // allocated core
+	spdk_nvme_sgl_descriptor * sgl_segment;
+	DiskPaxos::byte * buffer; //buffer used for the opt
+	int current_offset;
+	int current_segment;
+	uint32_t segment_sizes [3];
+
+	SGL_Proposal(
+		string disk_id,
+		size_t size_e,
+		uint32_t target_core,
+		DiskPaxos::byte * buff
+	): disk_id(disk_id), size_elem(size_e),target_core(target_core){
+		this->status = 0;
+		this->buffer = buff;
+		this->current_offset = 0;
+		this->current_segment = 0;
+	};
+
+	void build_sgl_segment(
+		int n_writes
+	){
+
+		int n_descriptors = 2 + (n_writes - 2) * 2 + 2 + 1;
+		sgl_segment = (spdk_nvme_sgl_descriptor *) malloc(sizeof(struct spdk_nvme_sgl_descriptor) * n_descriptors);
+
+		sgl_segment->address = (uint64_t) this->buffer;
+		sgl_segment->unkeyed.length =  this->size_elem;
+		sgl_segment->unkeyed.subtype =  SPDK_NVME_SGL_SUBTYPE_ADDRESS;
+		sgl_segment->unkeyed.type =  SPDK_NVME_SGL_TYPE_DATA_BLOCK;
+
+		(sgl_segment+1)->address = (uint64_t) (sgl_segment+2);
+		(sgl_segment+1)->unkeyed.length =  (n_writes - 2)*32 + 32;
+		(sgl_segment+1)->unkeyed.subtype =  SPDK_NVME_SGL_SUBTYPE_ADDRESS;
+		(sgl_segment+1)->unkeyed.type =  SPDK_NVME_SGL_TYPE_SEGMENT;
+
+		int n = 0;
+		for (n = 0; n < (n_writes-2); n++) {
+			(sgl_segment+2 + 2*n)->unkeyed.length =  this->size_elem * (SPDK_ENV::NUM_PROCESSES - 1);
+			(sgl_segment+2 + 2*n)->unkeyed.type =  SPDK_NVME_SGL_TYPE_BIT_BUCKET;
+
+			(sgl_segment+2 + 2*n + 1)->address = ((uint64_t) this->buffer) + ((n+1) * this->size_elem);
+			(sgl_segment+2 + 2*n + 1)->unkeyed.length =  this->size_elem;
+			(sgl_segment+2 + 2*n + 1)->unkeyed.subtype =  SPDK_NVME_SGL_SUBTYPE_ADDRESS;
+			(sgl_segment+2 + 2*n + 1)->unkeyed.type =  SPDK_NVME_SGL_TYPE_DATA_BLOCK;
+		}
+
+		int index = 2 + 2*n;
+		(sgl_segment+index)->unkeyed.length =  this->size_elem * (SPDK_ENV::NUM_PROCESSES - 1);
+		(sgl_segment+index)->unkeyed.type =  SPDK_NVME_SGL_TYPE_BIT_BUCKET;
+
+		index++;
+		(sgl_segment+index)->address = (uint64_t) (sgl_segment+index+1);
+		(sgl_segment+index)->unkeyed.length =  16;
+		(sgl_segment+index)->unkeyed.subtype =  SPDK_NVME_SGL_SUBTYPE_ADDRESS;
+		(sgl_segment+index)->unkeyed.type =  SPDK_NVME_SGL_TYPE_LAST_SEGMENT;
+
+		index++;
+		(sgl_segment+index)->address = ((uint64_t) this->buffer) + ((n+1) * this->size_elem);
+		(sgl_segment+index)->unkeyed.length =  this->size_elem;
+		(sgl_segment+index)->unkeyed.subtype =  SPDK_NVME_SGL_SUBTYPE_ADDRESS;
+		(sgl_segment+index)->unkeyed.type =  SPDK_NVME_SGL_TYPE_DATA_BLOCK;
 
 
+		for (int i = 0; i < n_descriptors; i++) {
+			spdk_nvme_sgl_descriptor desc = *(sgl_segment+i);
+			switch (desc.unkeyed.type) {
+				case SPDK_NVME_SGL_TYPE_DATA_BLOCK:
+					std::cout << "Type: SPDK_NVME_SGL_TYPE_DATA_BLOCK length: " << desc.unkeyed.length << " address: " << desc.address  << '\n';
+					break;
+				case SPDK_NVME_SGL_TYPE_BIT_BUCKET:
+					std::cout << "Type: SPDK_NVME_SGL_TYPE_BIT_BUCKET length: " << desc.unkeyed.length << '\n';
+					break;
+				case SPDK_NVME_SGL_TYPE_LAST_SEGMENT:
+					std::cout << "Type: SPDK_NVME_SGL_TYPE_LAST_SEGMENT length: " << desc.unkeyed.length << '\n';
+					break;
+				case SPDK_NVME_SGL_TYPE_SEGMENT:
+					std::cout << "Type: SPDK_NVME_SGL_TYPE_SEGMENT length: " << desc.unkeyed.length << '\n';
+					break;
+				default:
+					std::cout << "no match" << std::endl;
+			}
+		}
+
+		segment_sizes[0] = 32;
+		segment_sizes[1] = (n_writes - 2)*32 + 32;;
+		segment_sizes[2] = 16;
+
+		sgl_segment = (spdk_nvme_sgl_descriptor *) malloc(sizeof(struct spdk_nvme_sgl_descriptor) * 2);
+		sgl_segment->address = this->buffer;
+		sgl_segment->generic.subtype =  SPDK_NVME_SGL_SUBTYPE_ADDRESS;
+		sgl_segment->generic.type =  SPDK_NVME_SGL_TYPE_DATA_BLOCK;
+	};
+};
+
+static int nvme_req_next_sge_cb(void * cb_arg, void ** address,uint32_t *length){
+	SGL_Proposal * sgl = (SGL_Proposal *) cb_arg;
+	std::cout << "nvme_req_next_sge_cb called, offset: " << sgl->current_offset << '\n';
+
+	//length = sgl->segment_sizes[sgl->current_segment];
+	//address = ((void *) sgl->sgl_segment) + sgl->current_offset;
+	*length = 4096;
+	*address = ((void *) sgl->sgl_segment);
+	sgl->current_segment++;
+
+	return 0;
+}
+
+static void nvme_req_reset_sge_cb(void *cb_arg, uint32_t offset){
+	std::cout << "nvme_req_reset_sge_cb called, offset: " << offset << '\n';
+	SGL_Proposal * sgl = (SGL_Proposal *) cb_arg;
+	sgl->current_offset += offset;
+}
+*/
 /**
 Function to write a encode byte block into a buffer;
 the first 4 bytes keep the size of the block.
@@ -543,7 +726,7 @@ static void write_commit_complete(void *arg,const struct spdk_nvme_cpl *completi
 }
 
 void DiskPaxos::DiskPaxos::Commit(){
-	cout << "Consensus archived: " << this->local_block->input << " for slot: " << this->local_block->slot << endl;
+	cout << "Consensus archived: " << this->local_block->input << " for slot: " << this->local_block->slot << " on core " << this->target_core << endl;
 
 	string local_db_serialized = this->local_block->serialize();
 	map<string,unique_ptr<SPDK_ENV::NVME_NAMESPACE_MULTITHREAD>>::iterator it;
@@ -629,7 +812,7 @@ static void internal_proposal(void * arg1, void * arg2){
 			int rc = spdk_nvme_ns_cmd_write(it->second->ns, it_qpair->second , dO->buffer,
 								LBA_INDEX, /* LBA start */
 								1, /* number of LBAs */
-								simple_write_complete, dO, SPDK_NVME_IO_FLAGS_FORCE_UNIT_ACCESS); //submit a write operation to NVME
+								simple_write_complete, dO, 0); //submit a write operation to NVME
 
 			if (rc != 0) {
 					SPDK_ENV::error_on_cmd_submit(rc,"Proposal","write");
@@ -644,6 +827,119 @@ static void internal_proposal(void * arg1, void * arg2){
 	delete props;
 }
 
+/**
+static void test_func(void *arg,const struct spdk_nvme_cpl *completion){
+	SGL_Proposal * dO = (SGL_Proposal *) arg;
+
+	if (spdk_nvme_cpl_is_error(completion)) {
+		fprintf(stderr, "I/O error status: %s  test_func\n", spdk_nvme_cpl_get_status_string(&completion->status));
+		fprintf(stderr, "Write I/O failed, aborting run\n");
+		dO->status = 2;
+		exit(1);
+	}
+
+	string db_serialized = bytes_to_string(dO->buffer); //buffer to string
+	DiskBlock * db = new DiskBlock();
+	db->deserialize(db_serialized); //inverse of serialize
+
+	spdk_free(dO->buffer);
+	dO->status = 1;
+	std::cout << "Test func success: " << db->toString() << '\n';
+	delete db;
+}
+
+static void verify_event_test(void * arg1, void * arg2){
+	SGL_Proposal * dO = (SGL_Proposal *) arg1;
+
+	map<string,unique_ptr<SPDK_ENV::NVME_NAMESPACE_MULTITHREAD>>::iterator it;
+	it = SPDK_ENV::namespaces.find(dO->disk_id);
+
+	if (!dO->status){
+		map<uint32_t,struct spdk_nvme_qpair	*>::iterator it_qpair;
+		it_qpair = it->second->qpairs.find(dO->target_core);
+
+		int r = spdk_nvme_qpair_process_completions(it_qpair->second, 0);
+		if (r >= 0){
+			struct spdk_event * e = spdk_event_allocate(dO->target_core,verify_event_test,dO,NULL);
+			spdk_event_call(e);
+		}
+		else{
+			std::cout << "error on completions" << '\n';
+		}
+	}
+	else{
+		delete dO;
+	}
+}
+
+static void internal_multi_proposal(void * arg1, void * arg2){
+	MultiProposal * props = (MultiProposal *) arg1;
+
+	DiskBlock db;
+
+	vector<string> dbs_serialized;
+
+	int starting_slot = props->starting_slot;
+	for(auto str : props->commands){
+		db.slot = starting_slot;
+		db.input = str;
+		starting_slot++;
+		dbs_serialized.push_back(db.serialize());
+	}
+
+	std::cout << dbs_serialized.size() << '\n';
+
+	map<string,unique_ptr<SPDK_ENV::NVME_NAMESPACE_MULTITHREAD>>::iterator it;
+	map<uint32_t,struct spdk_nvme_qpair	*>::iterator it_qpair;
+	int LBA_INDEX = SPDK_ENV::NUM_CONCENSOS_LANES * SPDK_ENV::NUM_PROCESSES + PROPOSAL_OFFSET + props->starting_slot * SPDK_ENV::NUM_PROCESSES + props->pid;
+
+	for(auto disk_id: SPDK_ENV::addresses){
+		it = SPDK_ENV::namespaces.find(disk_id);
+
+		if (it != SPDK_ENV::namespaces.end()){
+
+			size_t BUFFER_SIZE = (it->second->info.lbaf + it->second->info.metadata_size);
+			DiskPaxos::byte * buff = (DiskPaxos::byte *) spdk_zmalloc(BUFFER_SIZE * dbs_serialized.size(), 0x1000, NULL, SPDK_ENV_SOCKET_ID_ANY, SPDK_MALLOC_DMA);
+
+			int index = 0;
+			for(auto str : dbs_serialized){
+				string_to_bytes(str,buff + index);
+				index += BUFFER_SIZE;
+			}
+
+			SGL_Proposal * sgl_prop = new SGL_Proposal(disk_id,BUFFER_SIZE,props->target_core,buff);
+			sgl_prop->build_sgl_segment(4);
+
+			it_qpair = it->second->qpairs.find(props->target_core);
+
+			if (buff == NULL) //apagar depois
+				fprintf(stderr, "NULL Buffer on Proposal\n");
+
+			int rc = spdk_nvme_ns_cmd_writev(it->second->ns, it_qpair->second ,
+								LBA_INDEX, // LBA start
+								//dbs_serialized.size() * SPDK_ENV::NUM_PROCESSES, // number of LBAs
+								1,
+								test_func,
+								sgl_prop,
+								0,
+								nvme_req_reset_sge_cb,
+								nvme_req_next_sge_cb
+							); //submit a write operation to NVME
+
+			if (rc != 0) {
+					SPDK_ENV::error_on_cmd_submit(rc,"MultiProposal","write");
+					exit(1);
+			}
+
+			struct spdk_event * e = spdk_event_allocate(sgl_prop->target_core,verify_event_test,sgl_prop,NULL);
+			spdk_event_call(e);
+		}
+	}
+
+	delete props;
+}
+*/
+
 void DiskPaxos::propose(int pid, int slot,string command){
 	uint32_t core = SPDK_ENV::allocate_replica_core();
 	Proposal * p = new Proposal(pid,slot,command,core);
@@ -652,6 +948,15 @@ void DiskPaxos::propose(int pid, int slot,string command){
 	spdk_event_call(e);
 }
 
+/**
+void DiskPaxos::propose_sgl(int pid, int starting_slot,vector<string> commands){
+	uint32_t core = SPDK_ENV::allocate_replica_core();
+	MultiProposal * p = new MultiProposal(pid,starting_slot,commands,core);
+
+	struct spdk_event * e = spdk_event_allocate(core,internal_multi_proposal,p,NULL);
+	spdk_event_call(e);
+}
+*/
 void DiskPaxos::propose(int pid, int slot,string command,uint32_t target_core){
 	uint32_t core = target_core;
 	Proposal * p = new Proposal(pid,slot,command,core);
@@ -694,15 +999,17 @@ static void LeaderRead_cleanup(void * arg1, void * arg2){
 
 static void leader_read_completion(void *arg,const struct spdk_nvme_cpl *completion){
 	LeaderReadOpt * ld_opt = (LeaderReadOpt *) arg;
+	LeaderRead * ld = ld_opt->ld;
 
 	if (spdk_nvme_cpl_is_error(completion)) {
 		fprintf(stderr, "I/O error status: %s leader_read_completion\n", spdk_nvme_cpl_get_status_string(&completion->status));
 		fprintf(stderr, "Write I/O failed, aborting run\n");
+
+		//SPDK_ENV::print_crtl_csts_status(ld_opt->disk_id);
+		SPDK_ENV::print_qpair_failure_reason(ld_opt->disk_id,ld_opt->target_core);
 		ld_opt->status = 2;
 		exit(1);
 	}
-
-	LeaderRead * ld = ld_opt->ld;
 
 	if (ld->status){ //already ended the read from a majority of disks
 		ld->n_events--;
@@ -867,6 +1174,8 @@ static void read_decision_completion(void *arg,const struct spdk_nvme_cpl *compl
 	if (spdk_nvme_cpl_is_error(completion)) {
 		fprintf(stderr, "I/O error status: %s read_decision_completion\n", spdk_nvme_cpl_get_status_string(&completion->status));
 		fprintf(stderr, "Write I/O failed, aborting run\n");
+
+		//SPDK_ENV::print_crtl_csts_status(ld_opt->disk_id);
 		ld_opt->status = 2;
 		exit(1);
 	}
@@ -983,6 +1292,141 @@ std::future<DiskBlock> DiskPaxos::read_decision(int slot,uint32_t target_core){
 
 	return response;
 }
+
+static void read_multiple_decision_cleanup(void * arg1, void * arg2){
+	MultipleDecisionRead * ld = (MultipleDecisionRead * ) arg1;
+
+	if (ld->n_events > 0){
+		struct spdk_event * e = spdk_event_allocate(ld->target_core,read_multiple_decision_cleanup,ld,NULL);
+		spdk_event_call(e);
+	}
+	else{
+		delete ld;
+	}
+}
+
+static void verify_event_multiple_decision(void * arg1, void * arg2){
+	MultipleDecisionReadOpt * dO = (MultipleDecisionReadOpt *) arg1;
+
+	map<string,unique_ptr<SPDK_ENV::NVME_NAMESPACE_MULTITHREAD>>::iterator it;
+	it = SPDK_ENV::namespaces.find(dO->disk_id);
+
+	if (!dO->status){
+		map<uint32_t,struct spdk_nvme_qpair	*>::iterator it_qpair;
+		it_qpair = it->second->qpairs.find(dO->target_core);
+
+		spdk_nvme_qpair_process_completions(it_qpair->second, 0);
+
+		struct spdk_event * e = spdk_event_allocate(dO->target_core,verify_event_multiple_decision,dO,NULL);
+		spdk_event_call(e);
+	}
+	else{
+		delete dO;
+	}
+}
+
+static void read_multiple_decision_completion(void *arg,const struct spdk_nvme_cpl *completion){
+	MultipleDecisionReadOpt * ld_opt = (MultipleDecisionReadOpt *) arg;
+
+	if (spdk_nvme_cpl_is_error(completion)) {
+		fprintf(stderr, "I/O error status: %s read_decision_completion\n", spdk_nvme_cpl_get_status_string(&completion->status));
+		fprintf(stderr, "Write I/O failed, aborting run\n");
+
+		//SPDK_ENV::print_crtl_csts_status(ld_opt->disk_id);
+		ld_opt->status = 2;
+		exit(1);
+	}
+	MultipleDecisionRead * ld = ld_opt->dr;
+
+	if (ld->status){ //already ended the read from a majority of disks
+		ld->n_events--;
+		spdk_free(ld_opt->buffer);
+		ld_opt->status = 1;
+		return;
+	}
+
+	map<int,DiskBlock>::iterator it;
+
+	for(int i = 0; i < ld->amount; i++){
+		it = ld->decisions.find(i + ld->starting_slot);
+		if (it == ld->decisions.end()){
+			string db_serialized = bytes_to_string(ld_opt->buffer + ld_opt->size_elem * i); //buffer to string
+			DiskBlock db;
+			db.deserialize(db_serialized); //inverse of serialize
+
+			if (db.isValid()){
+				ld->decisions.insert(pair<int,DiskBlock>(i + ld->starting_slot,db));
+			}
+		}
+	}
+
+	ld->disksSeen.insert(ld_opt->disk_id);
+
+	if(ld->should_deliver()){
+		ld->deliver();
+	}
+
+	ld->n_events--;
+	spdk_free(ld_opt->buffer);
+	ld_opt->status = 1;
+}
+
+static void read_multiple_decisions_event(void * arg1,void * arg2){
+	MultipleDecisionRead * ld = (MultipleDecisionRead *) arg1;
+
+	map<string,unique_ptr<SPDK_ENV::NVME_NAMESPACE_MULTITHREAD>>::iterator it;
+	map<uint32_t,struct spdk_nvme_qpair	*>::iterator it_qpair;
+
+	int LBA_INDEX = SPDK_ENV::NUM_CONCENSOS_LANES * SPDK_ENV::NUM_PROCESSES + ld->starting_slot;
+
+	for(auto disk_id: SPDK_ENV::addresses){
+		it = SPDK_ENV::namespaces.find(disk_id);
+
+		if (it != SPDK_ENV::namespaces.end()){
+
+			size_t BUFFER_SIZE = (it->second->info.lbaf + it->second->info.metadata_size);
+			MultipleDecisionReadOpt * ld_opt = new MultipleDecisionReadOpt(disk_id,BUFFER_SIZE,ld->target_core,ld);
+
+			ld_opt->buffer = (DiskPaxos::byte *) spdk_zmalloc(BUFFER_SIZE * ld->amount, 0x1000, NULL, SPDK_ENV_SOCKET_ID_ANY, SPDK_MALLOC_DMA);
+			it_qpair = it->second->qpairs.find(ld_opt->target_core);
+
+			if (ld_opt->buffer == NULL) //apagar depois
+				fprintf(stderr, "NULL Buffer on read_multiple_decision_event\n");
+
+			int rc = spdk_nvme_ns_cmd_read(it->second->ns, it_qpair->second , ld_opt->buffer,
+								LBA_INDEX,
+								ld->amount,
+								read_multiple_decision_completion, ld_opt,0);
+
+			if (rc != 0) {
+				SPDK_ENV::error_on_cmd_submit(rc,"read_multiple_decision_event","read");
+				exit(1);
+			}
+
+			ld->n_events++;
+			struct spdk_event * e = spdk_event_allocate(ld_opt->target_core,verify_event_multiple_decision,ld_opt,NULL);
+			spdk_event_call(e);
+		}
+	}
+}
+
+std::future<std::unique_ptr<std::map<int,DiskBlock>>> DiskPaxos::read_multiple_decisions(int slot,int amount){
+	uint32_t core = SPDK_ENV::allocate_replica_core();
+
+	MultipleDecisionRead * m_dr = new MultipleDecisionRead(slot,amount,core);
+
+	m_dr->callback = promise<unique_ptr< map<int,DiskBlock> >>();
+	auto response = m_dr->callback.get_future();
+
+
+	//spawn event to complete request
+	struct spdk_event * e = spdk_event_allocate(m_dr->target_core,read_multiple_decisions_event,m_dr,NULL);
+	spdk_event_call(e);
+
+	return response;
+}
+
+
 
 namespace DiskPaxos {
 	void launch_DiskPaxos(DiskPaxos * dp){

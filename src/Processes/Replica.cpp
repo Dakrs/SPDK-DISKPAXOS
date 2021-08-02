@@ -7,8 +7,11 @@
 #include <fstream>
 #include <thread>
 #include <chrono>
-#include <fstream>
 #include <iostream>
+#include <vector>
+#include <future>
+#include <map>
+#include <memory>
 
 namespace ReplicaPaxos {
 
@@ -51,7 +54,9 @@ namespace ReplicaPaxos {
     std::ifstream infile(filename);
     std::string line;
     Decision * d;
+    //int n_lines = 0;
 
+    std::vector<std::string> lines;
     try{
       while (std::getline(infile,line)) {
         int i = this->propose(line);
@@ -63,7 +68,7 @@ namespace ReplicaPaxos {
 
         this->decisionsTosolve.insert(std::unique_ptr<Decision>(d));
         this->handle_possible_decisions();
-        std::this_thread::sleep_for(5ms);
+        std::this_thread::sleep_for(0.5ms);
       }
 
       while(this->decisionsTosolve.size() > 0)
@@ -71,13 +76,22 @@ namespace ReplicaPaxos {
       std::cout << "Replica quiting after n_props: " << this->slot << " decisons size: " << this->decisions.size() << '\n';
       std::cout << "Logging results " << std::endl;
       this->output();
+
+      /**
+      int k = 0;
+      int amount = 5;
+      for(k = 0; k < 100; k+= 5){
+        std::future<std::unique_ptr<std::map<int,DiskBlock>>> ft = DiskPaxos::read_multiple_decisions(k,amount);
+        auto res = ft.get();
+
+        for (auto & [slot, db] : (*res)){
+          std::cout << "slot: " << db.slot << " input: " << db.input << '\n';
+        }
+      }*/
     }
     catch (std::exception& e){
       std::cerr << "Exception caught : " << e.what() << std::endl;
     }
-
-    //std::this_thread::sleep_for(2000ms);
-    //this->output();
   }
 
   void ReplicaPaxos::handle_possible_decisions(){

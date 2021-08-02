@@ -4,6 +4,8 @@
 #include <iostream>
 #include <vector>
 #include <string>
+#include <chrono>
+#include <thread>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -139,6 +141,8 @@ int main(int argc, char *argv[]) {
   ReplicaPaxos::ReplicaPaxos rp(PID);
   rp.run();
   leader_thread.join();
+  //using namespace std::chrono_literals;
+  //std::this_thread::sleep_for(5s);
 
   SPDK_ENV::spdk_end();
 

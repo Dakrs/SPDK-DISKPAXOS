@@ -74,9 +74,10 @@ namespace LeaderPaxos {
       auto t2 = std::chrono::high_resolution_clock::now();
       auto ms_int = std::chrono::duration_cast<std::chrono::seconds>(t2 - this->last_proposal_found);
 
-      if (ms_int.count() > 5){
+      if (ms_int.count() >= 5){
         this->aborting = true;
         std::cout << "5 secs without proposals, exiting" << std::endl;
+        return;
       }
     }
 
@@ -116,7 +117,7 @@ namespace LeaderPaxos {
     while(true){
       this->search(); //search for incoming proposals;
 
-
+      
       for (int i = 0; i < this->NUM_LANES; i++) {
         DiskPaxos::DiskPaxos * dp = this->slots[i];
         //se estiver livre ou se já tiver terminado
@@ -138,7 +139,7 @@ namespace LeaderPaxos {
         }
       }
 
-      this->cleanup(); //clean up old consensus
+      this->cleanup(); //clean up old allocated memory for consensus
 
       if (this->aborting){
         break;

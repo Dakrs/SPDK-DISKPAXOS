@@ -9,6 +9,7 @@ extern "C" {
 	#include "spdk/nvme_zns.h"
 	#include "spdk/env.h"
 	#include "spdk/thread.h"
+	#include "spdk/nvme_spec.h"
 }
 
 #include <cstring>
@@ -75,6 +76,8 @@ namespace SPDK_ENV {
   uint32_t allocate_replica_core();
 	void print_addresses();
 	void error_on_cmd_submit(int code, std::string func, std::string type);
+	void print_crtl_csts_status(std::string diskid);
+	void print_qpair_failure_reason(std::string diskid, uint32_t core);
 }
 
 #endif

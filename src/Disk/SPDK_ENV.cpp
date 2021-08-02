@@ -235,7 +235,9 @@ namespace SPDK_ENV {
 
     return 0;
   }
+
   void spdk_end() {
+    std::cout << "Shutting down SPDK Framework" << std::endl;
   	spdk_app_stop(0);
   	internal_spdk_event_launcher.join();
   }
@@ -284,6 +286,44 @@ namespace SPDK_ENV {
         break;
       default:
         break;
+    }
+  }
+
+  void print_crtl_csts_status(std::string diskid){
+    std::map<std::string,std::unique_ptr<NVME_NAMESPACE_MULTITHREAD>>::iterator it;
+    it = namespaces.find(diskid);
+
+    struct spdk_nvme_ctrlr	* ctrl = it->second->ctrlr;
+
+    union spdk_nvme_csts_register reg = spdk_nvme_ctrlr_get_regs_csts(ctrl);
+
+    std::cout << "Disk: " << diskid << " rdy: " << reg.bits.rdy << " cfs: " << reg.bits.cfs << '\n';
+  }
+
+  void print_qpair_failure_reason(std::string diskid,uint32_t core){
+    std::map<std::string,std::unique_ptr<NVME_NAMESPACE_MULTITHREAD>>::iterator it;
+    it = namespaces.find(diskid);
+
+    std::map<uint32_t,struct spdk_nvme_qpair	*>::iterator it_qpair;
+    it_qpair = it->second->qpairs.find(core);
+
+    spdk_nvme_qp_failure_reason reason = spdk_nvme_qpair_get_failure_reason(it_qpair->second);
+
+    switch (reason) {
+      case SPDK_NVME_QPAIR_FAILURE_NONE:
+        std::cout << "Error SPDK_NVME_QPAIR_FAILURE_NONE" << std::endl;
+        break;
+      case SPDK_NVME_QPAIR_FAILURE_LOCAL:
+        std::cout << "Error SPDK_NVME_QPAIR_FAILURE_LOCAL" << std::endl;
+        break;
+      case SPDK_NVME_QPAIR_FAILURE_REMOTE:
+        std::cout << "Error SPDK_NVME_QPAIR_FAILURE_REMOTE" << std::endl;
+        break;
+      case SPDK_NVME_QPAIR_FAILURE_UNKNOWN:
+        std::cout << "Error SPDK_NVME_QPAIR_FAILURE_UNKNOWN" << std::endl;
+        break;
+      default:
+        std::cout << "Error not found" << std::endl;
     }
   }
 }

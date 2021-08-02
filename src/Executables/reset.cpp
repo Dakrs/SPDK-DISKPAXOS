@@ -163,9 +163,13 @@ int main(int argc, char *argv[]) {
     for (i = 0; i < m_div; i++) {
       auto f2 = initialize(disk_string, n_blocks , 5000000 + N_PROCESSES*N_LANES + i*n_blocks); //proposals
       f2.get();
+      std::cout << "RESET PROPOSTALS FROM BLOCKS " << i *n_blocks << " to " << (i+1) * n_blocks << '\n';
     }
-    auto f4 = initialize(disk_string, remaining , 5000000 + N_PROCESSES*N_LANES + i*n_blocks); //proposals
-    f4.get();
+
+    if (remaining > 0){
+      auto f4 = initialize(disk_string, remaining , 5000000 + N_PROCESSES*N_LANES + i*n_blocks); //proposals
+      f4.get();
+    }
   }
   else{
     auto f3 = initialize(disk_string, N_PROCESSES*N_PROPOSALS , 5000000 + N_PROCESSES*N_LANES); //proposals

@@ -123,6 +123,12 @@ struct CallBack {
 		opts = CallBackOpts();
 	};
 	CallBack(
+		std::string disk_id
+	): disk(disk_id) {
+		status = 0;
+		opts = CallBackOpts();
+	};
+	CallBack(
 		byte * buffer,
 		std::string disk_id,
 		int k,
@@ -437,6 +443,15 @@ static void initialize_event(void * arg1, void * arg2){
 	std::map<std::string,std::unique_ptr<NVME_NAMESPACE>>::iterator it;
   it = namespaces.find(cb->disk);
 
+
+	 size_t BUFFER_SIZE = (it->second->lbaf + it->second->metadata_size);
+
+	 cb->buffer = (byte *) spdk_zmalloc(BUFFER_SIZE * cb->opts.LBA_SIZE, 0x1000, NULL, SPDK_ENV_SOCKET_ID_ANY, SPDK_MALLOC_DMA);
+
+	 if (cb->buffer == NULL) {
+			std::cout << "buffer is null" << '\n';
+	 }
+
 	int rc = spdk_nvme_ns_cmd_write(it->second->ns, it->second->qpair, cb->buffer,
 						cb->opts.LBA_INDEX, /* LBA start */
 						cb->opts.LBA_SIZE, /* number of LBAs */
@@ -474,21 +489,12 @@ std::future<void> initialize(std::string disk, int size,int offset){
     throw std::invalid_argument( "Disk not found" );
   }
 
-  size_t BUFFER_SIZE = (it->second->lbaf + it->second->metadata_size);
-
-  byte * buffer = (byte *) spdk_zmalloc(BUFFER_SIZE * size, 0x1000, NULL, SPDK_ENV_SOCKET_ID_ANY, SPDK_MALLOC_DMA);
-
-  if (buffer == NULL) {
-		std::cout << "buffer is null" << '\n';
-    throw std::bad_alloc();
-  }
-
 	/**
 	for (int i = 0; i < size; i++) {
 		string_to_bytes(db_serialized,buffer + i * BUFFER_SIZE);
 	}*/
 
-  CallBack<void> * cb = new CallBack<void>(buffer,disk);
+  CallBack<void> * cb = new CallBack<void>(disk);
 	cb->opts.LBA_INDEX = offset;
 	cb->opts.LBA_SIZE = size;
   cb->callback = std::promise<void>();
