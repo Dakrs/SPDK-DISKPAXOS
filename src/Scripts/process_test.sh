@@ -28,7 +28,7 @@ sudo ./Reset --processes 3 --lanes 32 --proposals $((PROPOSALS * 5)) --diskid nq
 #sudo ./Reset --processes 8 --lanes 10 --proposals 1600 --local --diskid 0000:00:04.0-NS:1
 #sudo ./Reset --processes 8 --lanes 10 --proposals 1600 --local --diskid 0000:00:04.0-NS:2
 
-(sudo ./DiskPaxos_SimpleProcess --processes 3 --lanes 32 --pid 0 --cpumask 0xc) &
+(sudo ./DiskPaxos_SimpleProcess --processes 3 --lanes 32 --pid 0 --cpumask 0x2) &
 #(sudo ./DiskPaxos_SimpleProcess --processes 3 --lanes 32 --pid 1 --cpumask 0x4) &
 #(sudo ./DiskPaxos_SimpleProcess --processes 3 --lanes 32 --pid 2 --cpumask 0x8) &
 

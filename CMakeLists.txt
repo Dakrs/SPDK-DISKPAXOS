@@ -11,6 +11,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} \
         -Wno-unused-parameter \
         -Wunused-function \
         -Wno-missing-field-initializers \
+        -Wno-pointer-arith \
         -Wmissing-declarations \
         -fno-strict-aliasing \
         -march=native \
@@ -115,6 +116,7 @@ add_executable(DiskPaxos_SimpleProcess
   src/Executables/single_process.cpp
   src/Disk/DiskBlock.cpp
   src/Disk/DiskPaxos.cpp
+  src/Disk/SglOpts.cpp
   src/Disk/SPDK_ENV.cpp
   src/Processes/Leader.cpp
   src/Processes/Replica.cpp

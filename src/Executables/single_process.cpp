@@ -2,6 +2,7 @@
 #include "Processes/Replica.hpp"
 #include "Processes/MultiReplica.hpp"
 #include "Disk/SPDK_ENV.hpp"
+#include "Disk/SglOpts.hpp"
 #include <iostream>
 #include <vector>
 #include <string>
@@ -137,11 +138,15 @@ int main(int argc, char *argv[]) {
   }
 
 
+  /**
   LeaderPaxos::LeaderPaxos lp(PID,N_LANES);
   std::thread leader_thread(&LeaderPaxos::LeaderPaxos::run,&lp);
   MultiReplicaPaxos::MultiReplicaPaxos rp(PID,N_LANES);
   rp.run();
-  leader_thread.join();
+  leader_thread.join();*/
+
+  SglOpts::basic_write(0);
+
   SPDK_ENV::spdk_end();
 
   std::cout << "Process with pid: " << PID << " quiting" << std::endl;

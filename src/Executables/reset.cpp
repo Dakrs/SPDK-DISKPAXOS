@@ -147,6 +147,13 @@ int main(int argc, char *argv[]) {
     exit(-1);
   }
 
+  for(int i = 0; i < 4; i++){
+    std::future<std::unique_ptr<DiskBlock>> f3 = read(disk_string,i);
+    auto db2 = f3.get();
+
+    std::cout << db2->toString() << std::endl;
+  }
+
   int n_blocks = 512;
   int m_div;
   int remaining;
