@@ -25,7 +25,7 @@ extern "C" {
 
 typedef unsigned char byte;
 
-#define CORE 1
+#define CORE 2
 
 int NUM_PROCESSES = 0;
 
@@ -306,7 +306,7 @@ static void run_spdk_event_framework(char * trid){
   struct spdk_app_opts app_opts = {};
   spdk_app_opts_init(&app_opts, sizeof(app_opts));
 	app_opts.name = "event_test";
-	app_opts.reactor_mask = "0x02";
+	app_opts.reactor_mask = "0x4";
 
   int rc = spdk_app_start(&app_opts, app_init, trid);
 

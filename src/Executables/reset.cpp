@@ -147,19 +147,58 @@ int main(int argc, char *argv[]) {
     exit(-1);
   }
 
+  int n_blocks = 512;
+  int m_div;
+  int remaining;
+  int i;
 
-  auto f = initialize(disk_string, N_PROCESSES*N_LANES , 0); //reset blocks
-  f.get();
-  std::cout << "Consensus blocks reseted" << '\n';
-  auto f1 = initialize(disk_string, N_PROPOSALS , N_PROCESSES*N_LANES); //decisions
-  f1.get();
-  std::cout << "Decision blocks reseted" << '\n';
+  if(N_PROCESSES*N_LANES > 512){
+    m_div = N_PROCESSES*N_LANES / n_blocks;
+    remaining = N_PROCESSES*N_LANES % n_blocks;
+
+    for (i = 0; i < m_div; i++) {
+      auto fcons = initialize(disk_string, n_blocks , i*n_blocks); //proposals
+      fcons.get();
+      std::cout << "Consensus blocks reseted " << i *n_blocks << " to " << (i+1) * n_blocks << '\n';
+    }
+
+    if (remaining > 0){
+      auto fcons_rem = initialize(disk_string, remaining , i*n_blocks); //proposals
+      fcons_rem.get();
+    }
+  }
+  else{
+    auto f = initialize(disk_string, N_PROCESSES*N_LANES , 0); //reset blocks
+    f.get();
+    std::cout << "Consensus blocks reseted" << '\n';
+  }
+
+  if (N_PROPOSALS > 512){
+    m_div = N_PROPOSALS / n_blocks;
+    remaining = N_PROPOSALS % n_blocks;
+
+    for (i = 0; i < m_div; i++) {
+      auto fdec = initialize(disk_string, n_blocks , N_PROCESSES*N_LANES + i*n_blocks); //proposals
+      fdec.get();
+      std::cout << "Decision blocks reseted " << i *n_blocks << " to " << (i+1) * n_blocks << '\n';
+    }
+
+    if (remaining > 0){
+      auto fdec_rem = initialize(disk_string, remaining , N_PROCESSES*N_LANES + i*n_blocks); //proposals
+      fdec_rem.get();
+    }
+  }
+  else{
+    auto f1 = initialize(disk_string, N_PROPOSALS , N_PROCESSES*N_LANES); //decisions
+    f1.get();
+    std::cout << "Decision blocks reseted" << '\n';
+  }
 
   if (N_PROCESSES*N_PROPOSALS > 512){
-    int n_blocks = 512;
-    int m_div = N_PROCESSES*N_PROPOSALS / n_blocks;
-    int remaining = N_PROCESSES*N_PROPOSALS % n_blocks;
-    int i = 0;
+    n_blocks = 512;
+    m_div = N_PROCESSES*N_PROPOSALS / n_blocks;
+    remaining = N_PROCESSES*N_PROPOSALS % n_blocks;
+    i = 0;
     for (i = 0; i < m_div; i++) {
       auto f2 = initialize(disk_string, n_blocks , 5000000 + N_PROCESSES*N_LANES + i*n_blocks); //proposals
       f2.get();

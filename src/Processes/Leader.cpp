@@ -84,7 +84,7 @@ namespace LeaderPaxos {
     for (auto & [slot, blk] : (*res)){
       it = this->proposals.find(slot);
       if (it == this->proposals.end()){
-        std::cout << "Proposal for slot: " << blk.slot << " input: " << blk.input << " on PID: " << this->pid << std::endl;
+        //std::cout << "Proposal for slot: " << blk.slot << " input: " << blk.input << " on PID: " << this->pid << std::endl;
         this->proposals.insert(std::pair<int,Proposal>(slot,Proposal(blk.slot,blk.input)));
 
         int target_slot = slot % this->NUM_LANES;
@@ -117,7 +117,7 @@ namespace LeaderPaxos {
     while(true){
       this->search(); //search for incoming proposals;
 
-      
+
       for (int i = 0; i < this->NUM_LANES; i++) {
         DiskPaxos::DiskPaxos * dp = this->slots[i];
         //se estiver livre ou se já tiver terminado

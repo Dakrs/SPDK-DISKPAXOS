@@ -118,6 +118,7 @@ add_executable(DiskPaxos_SimpleProcess
   src/Disk/SPDK_ENV.cpp
   src/Processes/Leader.cpp
   src/Processes/Replica.cpp
+  src/Processes/MultiReplica.cpp
 )
 
 include_spdk(DiskPaxos_SimpleProcess)

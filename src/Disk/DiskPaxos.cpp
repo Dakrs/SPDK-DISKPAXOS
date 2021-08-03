@@ -726,7 +726,7 @@ static void write_commit_complete(void *arg,const struct spdk_nvme_cpl *completi
 }
 
 void DiskPaxos::DiskPaxos::Commit(){
-	cout << "Consensus archived: " << this->local_block->input << " for slot: " << this->local_block->slot << " on core " << this->target_core << endl;
+	//cout << "Consensus archived: " << this->local_block->input << " for slot: " << this->local_block->slot << " on core " << this->target_core << endl;
 
 	string local_db_serialized = this->local_block->serialize();
 	map<string,unique_ptr<SPDK_ENV::NVME_NAMESPACE_MULTITHREAD>>::iterator it;
@@ -1329,8 +1329,8 @@ static void read_multiple_decision_completion(void *arg,const struct spdk_nvme_c
 	MultipleDecisionReadOpt * ld_opt = (MultipleDecisionReadOpt *) arg;
 
 	if (spdk_nvme_cpl_is_error(completion)) {
-		fprintf(stderr, "I/O error status: %s read_decision_completion\n", spdk_nvme_cpl_get_status_string(&completion->status));
-		fprintf(stderr, "Write I/O failed, aborting run\n");
+		fprintf(stderr, "I/O error status: %s read_multiple_decision_completion\n", spdk_nvme_cpl_get_status_string(&completion->status));
+		fprintf(stderr, "Read I/O failed, aborting run\n");
 
 		//SPDK_ENV::print_crtl_csts_status(ld_opt->disk_id);
 		ld_opt->status = 2;

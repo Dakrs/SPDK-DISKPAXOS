@@ -1,5 +1,6 @@
 #include "Processes/Leader.hpp"
 #include "Processes/Replica.hpp"
+#include "Processes/MultiReplica.hpp"
 #include "Disk/SPDK_ENV.hpp"
 #include <iostream>
 #include <vector>
@@ -138,13 +139,12 @@ int main(int argc, char *argv[]) {
 
   LeaderPaxos::LeaderPaxos lp(PID,N_LANES);
   std::thread leader_thread(&LeaderPaxos::LeaderPaxos::run,&lp);
-  ReplicaPaxos::ReplicaPaxos rp(PID);
+  MultiReplicaPaxos::MultiReplicaPaxos rp(PID,N_LANES);
   rp.run();
   leader_thread.join();
-  //using namespace std::chrono_literals;
-  //std::this_thread::sleep_for(5s);
-
   SPDK_ENV::spdk_end();
+
+  std::cout << "Process with pid: " << PID << " quiting" << std::endl;
 
   return 0;
 }

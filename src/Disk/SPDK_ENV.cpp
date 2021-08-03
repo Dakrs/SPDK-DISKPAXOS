@@ -188,6 +188,8 @@ namespace SPDK_ENV {
   	//spdk_vmd_fini();
 
   	spdk_app_fini();
+
+    ready = false;
   }
 
 
