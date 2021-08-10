@@ -12,6 +12,8 @@ namespace SPDK_ENV {
   int NUM_CONCENSOS_LANES = 0;
   uint32_t NEXT_CORE = 0;
   uint32_t NEXT_CORE_REPLICA = 0;
+  int SCHEDULE_EVENTS[MAX_NUMBER_CORES];
+
 
   std::set<std::string> crtl_addresses;
   std::set<std::string> addresses; //set a string identifying every disk
@@ -38,12 +40,19 @@ namespace SPDK_ENV {
   		return -1;
   	}
 
+    struct spdk_nvme_io_qpair_opts qpair_opts;
+    spdk_nvme_ctrlr_get_default_io_qpair_opts(ctrlr,&qpair_opts,sizeof(struct spdk_nvme_io_qpair_opts));
+
+    qpair_opts.io_queue_size = 1024;
+    qpair_opts.io_queue_requests = 2048;
+    std::cout << "NS default qpair size: " << qpair_opts.io_queue_size << " default request: " << qpair_opts.io_queue_requests << '\n';
+
     NVME_NAMESPACE_MULTITHREAD * my_ns = new NVME_NAMESPACE_MULTITHREAD(ctrlr,ns);
 
   	uint32_t n_cores = spdk_env_get_core_count();
   	uint32_t k = spdk_env_get_first_core();
   	for (uint32_t i = 0; i < n_cores; i++) {
-  		my_ns->qpairs.insert(std::pair<uint32_t,struct spdk_nvme_qpair	*>(k,spdk_nvme_ctrlr_alloc_io_qpair(ctrlr, NULL, 0)));
+  		my_ns->qpairs.insert(std::pair<uint32_t,struct spdk_nvme_qpair	*>(k,spdk_nvme_ctrlr_alloc_io_qpair(ctrlr, &qpair_opts, sizeof(struct spdk_nvme_io_qpair_opts))));
   		k = spdk_env_get_next_core(k);
   	}
 
@@ -145,6 +154,11 @@ namespace SPDK_ENV {
 
   static void app_init(void * arg){
     int rc;
+
+    for (int i = 0; i < MAX_NUMBER_CORES; i++) {
+      SCHEDULE_EVENTS[i] = 0;
+    }
+
     if (arg == NULL){
       std::cout << "Connecting to local device" << std::endl;
       rc = spdk_nvme_probe(NULL, NULL, probe_cb, attach_cb, NULL);

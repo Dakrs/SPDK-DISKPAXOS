@@ -1,6 +1,6 @@
 #!/bin/sh
 
-PROPOSALS=40000
+PROPOSALS=10000
 
 mkdir example_files
 
@@ -21,8 +21,8 @@ mkdir output
 make
 
 sudo ./Reset --processes 3 --lanes 32 --proposals $((PROPOSALS * 5)) --diskid nqn.2016-06.io.spdk:cnode1 --port 4421 --subnqn nqn.2016-06.io.spdk:cnode1
-sudo ./Reset --processes 3 --lanes 32 --proposals $((PROPOSALS * 5)) --diskid nqn.2016-06.io.spdk:cnode2 --port 4422 --subnqn nqn.2016-06.io.spdk:cnode2
-sudo ./Reset --processes 3 --lanes 32 --proposals $((PROPOSALS * 5)) --diskid nqn.2016-06.io.spdk:cnode3 --port 4423 --subnqn nqn.2016-06.io.spdk:cnode3
+#sudo ./Reset --processes 3 --lanes 32 --proposals $((PROPOSALS * 5)) --diskid nqn.2016-06.io.spdk:cnode2 --port 4422 --subnqn nqn.2016-06.io.spdk:cnode2
+#sudo ./Reset --processes 3 --lanes 32 --proposals $((PROPOSALS * 5)) --diskid nqn.2016-06.io.spdk:cnode3 --port 4423 --subnqn nqn.2016-06.io.spdk:cnode3
 
 #sudo ./Reset --processes 8 --lanes 10 --proposals 6400 --diskid nqn.2016-06.io.spdk:cnode2 --port 4422 --subnqn nqn.2016-06.io.spdk:cnode2
 #sudo ./Reset --processes 8 --lanes 10 --proposals 1600 --local --diskid 0000:00:04.0-NS:1

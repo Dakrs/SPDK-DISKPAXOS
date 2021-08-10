@@ -138,14 +138,14 @@ int main(int argc, char *argv[]) {
   }
 
 
-  /**
+  
   LeaderPaxos::LeaderPaxos lp(PID,N_LANES);
   std::thread leader_thread(&LeaderPaxos::LeaderPaxos::run,&lp);
   MultiReplicaPaxos::MultiReplicaPaxos rp(PID,N_LANES);
   rp.run();
-  leader_thread.join();*/
+  leader_thread.join();
 
-  SglOpts::basic_write(0);
+  //SglOpts::basic_write(0);
 
   SPDK_ENV::spdk_end();
 

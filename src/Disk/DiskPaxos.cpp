@@ -380,7 +380,7 @@ static std::string bytes_to_string(DiskPaxos::byte * buffer){
             (unsigned char)(buffer[2]) << 16 |
             (unsigned char)(buffer[3]) << 24);
 
-	if (size > 512){
+	if (size > 1024){
 		return std::string((char *)buffer,0);
 	}
 
