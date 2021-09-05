@@ -138,11 +138,12 @@ int main(int argc, char *argv[]) {
   }
 
 
-  
+
   LeaderPaxos::LeaderPaxos lp(PID,N_LANES);
   std::thread leader_thread(&LeaderPaxos::LeaderPaxos::run,&lp);
   MultiReplicaPaxos::MultiReplicaPaxos rp(PID,N_LANES);
   rp.run();
+  std::cout << "Exiting and starting spdk closure" << '\n';
   leader_thread.join();
 
   //SglOpts::basic_write(0);

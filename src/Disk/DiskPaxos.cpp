@@ -481,7 +481,7 @@ static void verify_event(void * arg1, void * arg2){
 		map<uint32_t,struct spdk_nvme_qpair	*>::iterator it_qpair;
 		it_qpair = it->second->qpairs.find(dO->target_core);
 
-		spdk_nvme_qpair_process_completions(it_qpair->second, 0);
+		spdk_nvme_qpair_process_completions(it_qpair->second, 1);
 
 		struct spdk_event * e = spdk_event_allocate(dO->target_core,verify_event,dO,NULL);
 		spdk_event_call(e);
@@ -551,6 +551,7 @@ static void read_complete(void *arg,const struct spdk_nvme_cpl *completion){
 
 	spdk_free(dO->buffer);
 	dO->status = 1;
+	SPDK_ENV::SCHEDULE_EVENTS[dp->target_core]--;
 }
 
 static void read_full_line(string disk_id,int tick,DiskPaxos::DiskPaxos * dp){
@@ -578,6 +579,7 @@ static void read_full_line(string disk_id,int tick,DiskPaxos::DiskPaxos * dp){
 			exit(1);
 	}
 
+	SPDK_ENV::SCHEDULE_EVENTS[dp->target_core]++;
 	dO->dp->n_events++;
 	struct spdk_event * e = spdk_event_allocate(dp->target_core,verify_event,dO,NULL);
 	spdk_event_call(e);
@@ -600,6 +602,7 @@ static void write_complete(void *arg,const struct spdk_nvme_cpl *completion){
 	}
 	dO->dp->n_events--;
 	dO->status = 1;
+	SPDK_ENV::SCHEDULE_EVENTS[dO->target_core]--;
 }
 
 void DiskPaxos::DiskPaxos::ReadAndWrite(){
@@ -634,6 +637,7 @@ void DiskPaxos::DiskPaxos::ReadAndWrite(){
 					exit(1);
 			}
 
+			SPDK_ENV::SCHEDULE_EVENTS[this->target_core]++;
 			this->n_events++;
 			struct spdk_event * e = spdk_event_allocate(this->target_core,verify_event,dO,NULL);
 			spdk_event_call(e);
@@ -723,6 +727,7 @@ static void write_commit_complete(void *arg,const struct spdk_nvme_cpl *completi
 		struct spdk_event * e = spdk_event_allocate(dp->target_core,cleanup,dp,NULL);
 		spdk_event_call(e);
 	}
+	SPDK_ENV::SCHEDULE_EVENTS[dp->target_core]--;
 }
 
 void DiskPaxos::DiskPaxos::Commit(){
@@ -759,7 +764,7 @@ void DiskPaxos::DiskPaxos::Commit(){
 				SPDK_ENV::error_on_cmd_submit(rc,"Commit","write");
 				exit(1);
 			}
-
+			SPDK_ENV::SCHEDULE_EVENTS[this->target_core]++;
 			this->n_events++;
 			struct spdk_event * e = spdk_event_allocate(this->target_core,verify_event,dO,NULL);
 			spdk_event_call(e);
@@ -779,6 +784,7 @@ static void simple_write_complete(void *arg,const struct spdk_nvme_cpl *completi
 
 	spdk_free(dO->buffer);
 	dO->status = 1;
+	SPDK_ENV::SCHEDULE_EVENTS[dO->target_core]--;
 }
 
 static void internal_proposal(void * arg1, void * arg2){
@@ -819,6 +825,7 @@ static void internal_proposal(void * arg1, void * arg2){
 					exit(1);
 			}
 
+			SPDK_ENV::SCHEDULE_EVENTS[dO->target_core]++;
 			struct spdk_event * e = spdk_event_allocate(dO->target_core,verify_event,dO,NULL);
 			spdk_event_call(e);
 		}
@@ -975,7 +982,7 @@ static void verify_event_leader(void * arg1, void * arg2){
 		map<uint32_t,struct spdk_nvme_qpair	*>::iterator it_qpair;
 		it_qpair = it->second->qpairs.find(dO->target_core);
 
-		spdk_nvme_qpair_process_completions(it_qpair->second, 0);
+		spdk_nvme_qpair_process_completions(it_qpair->second, 1);
 
 		struct spdk_event * e = spdk_event_allocate(dO->target_core,verify_event_leader,dO,NULL);
 		spdk_event_call(e);
@@ -1002,14 +1009,21 @@ static void leader_read_completion(void *arg,const struct spdk_nvme_cpl *complet
 	LeaderRead * ld = ld_opt->ld;
 
 	if (spdk_nvme_cpl_is_error(completion)) {
-		fprintf(stderr, "I/O error status: %s leader_read_completion\n", spdk_nvme_cpl_get_status_string(&completion->status));
-		fprintf(stderr, "Write I/O failed, aborting run\n");
+		fprintf(stderr, "I/O error status: %s leader_read_completion on slot %d\n", spdk_nvme_cpl_get_status_string(&completion->status),ld->starting_slot);
+		fprintf(stderr, "Read I/O failed, aborting run\n");
 
-		//SPDK_ENV::print_crtl_csts_status(ld_opt->disk_id);
+		std::cout << "CTRL STATUS: " << SPDK_ENV::ctrlr_current_status(ld_opt->disk_id) << '\n';
 		SPDK_ENV::print_qpair_failure_reason(ld_opt->disk_id,ld_opt->target_core);
 		ld_opt->status = 2;
-		exit(1);
+
+		SPDK_ENV::qpair_reconnect_attempt(ld_opt->disk_id,ld_opt->target_core);
+
+		//bool res = SPDK_ENV::reconnect(ld_opt->disk_id,ld_opt->target_core,10);
+		//std::cout << "reconnect = " << res << '\n';
+
+		exit(-1);
 	}
+	SPDK_ENV::SCHEDULE_EVENTS[ld_opt->target_core]--;
 
 	if (ld->status){ //already ended the read from a majority of disks
 		ld->n_events--;
@@ -1098,6 +1112,7 @@ static void read_list_proposals(void * arg1,void * arg2){
 					exit(1);
 			}
 
+			SPDK_ENV::SCHEDULE_EVENTS[ld_opt->target_core]++;
 			ld->n_events++;
 			struct spdk_event * e = spdk_event_allocate(ld_opt->target_core,verify_event_leader,ld_opt,NULL);
 			spdk_event_call(e);
@@ -1149,6 +1164,7 @@ static void read_decision_repeat(DecisionReadOpt * dO){
 						LBA_INDEX,
 						1,
 						read_decision_completion, dO,0);
+	SPDK_ENV::SCHEDULE_EVENTS[dO->target_core]++;
 
 	if (rc != 0) {
 			SPDK_ENV::error_on_cmd_submit(rc,"read_decision_repeat","read");
@@ -1180,6 +1196,8 @@ static void read_decision_completion(void *arg,const struct spdk_nvme_cpl *compl
 		exit(1);
 	}
 	DecisionRead * ld = ld_opt->dr;
+
+	SPDK_ENV::SCHEDULE_EVENTS[ld_opt->target_core]--;
 
 	if (ld->status){ //already ended the read from a majority of disks
 		ld->n_events--;
@@ -1217,7 +1235,7 @@ static void verify_event_decision(void * arg1, void * arg2){
 		map<uint32_t,struct spdk_nvme_qpair	*>::iterator it_qpair;
 		it_qpair = it->second->qpairs.find(dO->target_core);
 
-		spdk_nvme_qpair_process_completions(it_qpair->second, 0);
+		spdk_nvme_qpair_process_completions(it_qpair->second, 1);
 
 		struct spdk_event * e = spdk_event_allocate(dO->target_core,verify_event_decision,dO,NULL);
 		spdk_event_call(e);
@@ -1259,6 +1277,7 @@ static void read_decision_event(void * arg1,void * arg2){
 				exit(1);
 			}
 
+			SPDK_ENV::SCHEDULE_EVENTS[ld_opt->target_core]++;
 			ld->n_events++;
 			struct spdk_event * e = spdk_event_allocate(ld_opt->target_core,verify_event_decision,ld_opt,NULL);
 			spdk_event_call(e);
@@ -1315,7 +1334,7 @@ static void verify_event_multiple_decision(void * arg1, void * arg2){
 		map<uint32_t,struct spdk_nvme_qpair	*>::iterator it_qpair;
 		it_qpair = it->second->qpairs.find(dO->target_core);
 
-		spdk_nvme_qpair_process_completions(it_qpair->second, 0);
+		spdk_nvme_qpair_process_completions(it_qpair->second, 1);
 
 		struct spdk_event * e = spdk_event_allocate(dO->target_core,verify_event_multiple_decision,dO,NULL);
 		spdk_event_call(e);
@@ -1337,6 +1356,7 @@ static void read_multiple_decision_completion(void *arg,const struct spdk_nvme_c
 		exit(1);
 	}
 	MultipleDecisionRead * ld = ld_opt->dr;
+	SPDK_ENV::SCHEDULE_EVENTS[ld_opt->target_core]--;
 
 	if (ld->status){ //already ended the read from a majority of disks
 		ld->n_events--;
@@ -1403,6 +1423,7 @@ static void read_multiple_decisions_event(void * arg1,void * arg2){
 				exit(1);
 			}
 
+			SPDK_ENV::SCHEDULE_EVENTS[ld_opt->target_core]++;
 			ld->n_events++;
 			struct spdk_event * e = spdk_event_allocate(ld_opt->target_core,verify_event_multiple_decision,ld_opt,NULL);
 			spdk_event_call(e);

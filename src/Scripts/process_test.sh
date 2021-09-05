@@ -1,6 +1,6 @@
 #!/bin/sh
 
-PROPOSALS=10000
+PROPOSALS=12000
 
 mkdir example_files
 

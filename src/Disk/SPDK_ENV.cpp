@@ -43,8 +43,8 @@ namespace SPDK_ENV {
     struct spdk_nvme_io_qpair_opts qpair_opts;
     spdk_nvme_ctrlr_get_default_io_qpair_opts(ctrlr,&qpair_opts,sizeof(struct spdk_nvme_io_qpair_opts));
 
-    qpair_opts.io_queue_size = 1024;
-    qpair_opts.io_queue_requests = 2048;
+    qpair_opts.io_queue_size = 32768;
+    qpair_opts.io_queue_requests = 32768;
     std::cout << "NS default qpair size: " << qpair_opts.io_queue_size << " default request: " << qpair_opts.io_queue_requests << '\n';
 
     NVME_NAMESPACE_MULTITHREAD * my_ns = new NVME_NAMESPACE_MULTITHREAD(ctrlr,ns);
@@ -256,6 +256,10 @@ namespace SPDK_ENV {
     std::cout << "Shutting down SPDK Framework" << std::endl;
   	spdk_app_stop(0);
   	internal_spdk_event_launcher.join();
+
+    for (int i = 0; i < MAX_NUMBER_CORES; i++) {
+      std::cout << "CORE: " << i << " EVENTS_COUNT: " << SCHEDULE_EVENTS[i] << '\n';
+    }
   }
 
   uint32_t allocate_leader_core(){
@@ -341,5 +345,60 @@ namespace SPDK_ENV {
       default:
         std::cout << "Error not found" << std::endl;
     }
+  }
+
+  bool qpair_reconnect_attempt(std::string diskid,uint32_t core){
+    std::map<std::string,std::unique_ptr<NVME_NAMESPACE_MULTITHREAD>>::iterator it;
+    it = namespaces.find(diskid);
+
+    std::map<uint32_t,struct spdk_nvme_qpair	*>::iterator it_qpair;
+    it_qpair = it->second->qpairs.find(core);
+
+    int res = spdk_nvme_ctrlr_reconnect_io_qpair(it_qpair->second);
+
+    bool result;
+    switch (res) {
+      case 0:
+        std::cout << "Successfully reconnected ou already connected" << std::endl;
+        result = true;
+        break;
+      case -EAGAIN:
+        std::cout << "Unable to reconnect but the controller is still connected and is either resetting or enabled." << std::endl;
+        result = false;
+        break;
+      case -ENODEV:
+        std::cout << "The controller was removed" << std::endl;
+        result = false;
+        break;
+      case -ENXIO:
+        std::cout << "Failed state but is not yet resetting" << std::endl;
+        result = false;
+        break;
+      default:
+        std::cout << "Error not found" << std::endl;
+        result = false;
+    }
+
+    return result;
+  }
+
+  bool reconnect(std::string diskid,uint32_t core,int attempts){
+    bool res = false;
+
+    int i = 0;
+    while (i < attempts && !res) {
+      res = qpair_reconnect_attempt(diskid,core);
+      i++;
+    }
+
+    return res;
+  }
+
+
+  bool ctrlr_current_status(std::string diskid){
+    std::map<std::string,std::unique_ptr<NVME_NAMESPACE_MULTITHREAD>>::iterator it;
+    it = namespaces.find(diskid);
+
+    return spdk_nvme_ctrlr_is_failed(it->second->ctrlr);
   }
 }

@@ -81,6 +81,9 @@ namespace SPDK_ENV {
 	void error_on_cmd_submit(int code, std::string func, std::string type);
 	void print_crtl_csts_status(std::string diskid);
 	void print_qpair_failure_reason(std::string diskid, uint32_t core);
+	bool qpair_reconnect_attempt(std::string diskid,uint32_t core);
+	bool reconnect(std::string diskid,uint32_t core,int attempts);
+	bool ctrlr_current_status(std::string diskid);
 }
 
 #endif

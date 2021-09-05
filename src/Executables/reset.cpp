@@ -167,7 +167,7 @@ int main(int argc, char *argv[]) {
     for (i = 0; i < m_div; i++) {
       auto fcons = initialize(disk_string, n_blocks , i*n_blocks); //proposals
       fcons.get();
-      std::cout << "Consensus blocks reseted " << i *n_blocks << " to " << (i+1) * n_blocks << '\n';
+      //std::cout << "Consensus blocks reseted " << i *n_blocks << " to " << (i+1) * n_blocks << '\n';
     }
 
     if (remaining > 0){
@@ -178,8 +178,9 @@ int main(int argc, char *argv[]) {
   else{
     auto f = initialize(disk_string, N_PROCESSES*N_LANES , 0); //reset blocks
     f.get();
-    std::cout << "Consensus blocks reseted" << '\n';
   }
+
+  std::cout << "Consensus blocks reseted" << '\n';
 
   if (N_PROPOSALS > 512){
     m_div = N_PROPOSALS / n_blocks;
@@ -188,7 +189,7 @@ int main(int argc, char *argv[]) {
     for (i = 0; i < m_div; i++) {
       auto fdec = initialize(disk_string, n_blocks , N_PROCESSES*N_LANES + i*n_blocks); //proposals
       fdec.get();
-      std::cout << "Decision blocks reseted " << i *n_blocks << " to " << (i+1) * n_blocks << '\n';
+      //std::cout << "Decision blocks reseted " << i *n_blocks << " to " << (i+1) * n_blocks << '\n';
     }
 
     if (remaining > 0){
@@ -199,8 +200,9 @@ int main(int argc, char *argv[]) {
   else{
     auto f1 = initialize(disk_string, N_PROPOSALS , N_PROCESSES*N_LANES); //decisions
     f1.get();
-    std::cout << "Decision blocks reseted" << '\n';
   }
+
+  std::cout << "Decision blocks reseted" << '\n';
 
   if (N_PROCESSES*N_PROPOSALS > 512){
     n_blocks = 512;
@@ -210,7 +212,7 @@ int main(int argc, char *argv[]) {
     for (i = 0; i < m_div; i++) {
       auto f2 = initialize(disk_string, n_blocks , 5000000 + N_PROCESSES*N_LANES + i*n_blocks); //proposals
       f2.get();
-      std::cout << "RESET PROPOSTALS FROM BLOCKS " << i *n_blocks << " to " << (i+1) * n_blocks << '\n';
+      //std::cout << "RESET PROPOSTALS FROM BLOCKS " << i *n_blocks << " to " << (i+1) * n_blocks << '\n';
     }
 
     if (remaining > 0){
