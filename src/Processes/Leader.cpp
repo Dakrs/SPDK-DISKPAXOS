@@ -74,9 +74,9 @@ namespace LeaderPaxos {
       auto t2 = std::chrono::high_resolution_clock::now();
       auto ms_int = std::chrono::duration_cast<std::chrono::seconds>(t2 - this->last_proposal_found);
 
-      if (ms_int.count() >= 5){
+      if (ms_int.count() >= 3){
         this->aborting = true;
-        std::cout << "5 secs without proposals, exiting" << std::endl;
+        std::cout << "3 seconds without proposals, exiting" << std::endl;
         return;
       }
     }
@@ -140,7 +140,6 @@ namespace LeaderPaxos {
       }
 
       this->cleanup(); //clean up old allocated memory for consensus
-
       if (this->aborting){
         break;
       }

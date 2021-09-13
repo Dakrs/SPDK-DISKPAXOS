@@ -68,6 +68,20 @@ namespace SPDK_ENV {
   };
 
 
+	struct Timer {
+		uint64_t next;
+		uint64_t interval;
+		uint32_t core;
+
+		Timer(uint64_t in,uint32_t c){
+			this->interval = in;
+			this->core = c;
+		};
+		void schedule();
+		bool hasTimedOut();
+	};
+
+
   extern std::set<std::string> addresses;
   extern std::vector<std::unique_ptr<NVME_CONTROLER_V2>> controllers;
   extern std::map<std::string,std::unique_ptr<NVME_NAMESPACE_MULTITHREAD>> namespaces;
@@ -84,6 +98,7 @@ namespace SPDK_ENV {
 	bool qpair_reconnect_attempt(std::string diskid,uint32_t core);
 	bool reconnect(std::string diskid,uint32_t core,int attempts);
 	bool ctrlr_current_status(std::string diskid);
+	void keep_alive_routine(uint64_t interval);
 }
 
 #endif

@@ -23,7 +23,16 @@ namespace SPDK_ENV {
   std::atomic<bool> ready(false); //flag to make sure spdk libray has started
   std::thread internal_spdk_event_launcher; //internal thread to coordinate spdk.
 
+  void Timer::schedule(){
+    this->next = spdk_get_ticks() + this->interval * spdk_get_ticks_hz();
+  }
+
+  bool Timer::hasTimedOut(){
+    return spdk_get_ticks() >= this->next;
+  }
+
   static bool probe_cb(void *cb_ctx,const struct spdk_nvme_transport_id *trid,struct spdk_nvme_ctrlr_opts *opts){
+    //spdk_nvme_ctrlr_process_admin_completions
     /**
     std::string addr(trid->traddr);
     const bool is_in = crtl_addresses.find(addr) != crtl_addresses.end();
@@ -43,8 +52,8 @@ namespace SPDK_ENV {
     struct spdk_nvme_io_qpair_opts qpair_opts;
     spdk_nvme_ctrlr_get_default_io_qpair_opts(ctrlr,&qpair_opts,sizeof(struct spdk_nvme_io_qpair_opts));
 
-    qpair_opts.io_queue_size = 32768;
-    qpair_opts.io_queue_requests = 32768;
+    qpair_opts.io_queue_size = 16383;
+    qpair_opts.io_queue_requests = 16383;
     std::cout << "NS default qpair size: " << qpair_opts.io_queue_size << " default request: " << qpair_opts.io_queue_requests << '\n';
 
     NVME_NAMESPACE_MULTITHREAD * my_ns = new NVME_NAMESPACE_MULTITHREAD(ctrlr,ns);
@@ -181,6 +190,8 @@ namespace SPDK_ENV {
   	NEXT_CORE = spdk_env_get_first_core();
   	NEXT_CORE_REPLICA = spdk_env_get_first_core();
 
+    keep_alive_routine(3);
+
   	ready = true;
 
   	std::cout << "Succeded: CPU_CORES -> " << spdk_env_get_core_count() << std::endl;
@@ -257,9 +268,10 @@ namespace SPDK_ENV {
   	spdk_app_stop(0);
   	internal_spdk_event_launcher.join();
 
+    /**
     for (int i = 0; i < MAX_NUMBER_CORES; i++) {
       std::cout << "CORE: " << i << " EVENTS_COUNT: " << SCHEDULE_EVENTS[i] << '\n';
-    }
+    }*/
   }
 
   uint32_t allocate_leader_core(){
@@ -345,6 +357,11 @@ namespace SPDK_ENV {
       default:
         std::cout << "Error not found" << std::endl;
     }
+
+    //std::cout << "CURRENT SCHEDULE EVENTS FOR CORE: " << core << " EVENTS_COUNT: " << SCHEDULE_EVENTS[core] << '\n';
+    for (int i = 0; i < 4; i++) {
+      std::cout << "CURRENT SCHEDULE EVENTS FOR CORE: " << i << " EVENTS_COUNT: " << SCHEDULE_EVENTS[i] << '\n';
+    }
   }
 
   bool qpair_reconnect_attempt(std::string diskid,uint32_t core){
@@ -400,5 +417,30 @@ namespace SPDK_ENV {
     it = namespaces.find(diskid);
 
     return spdk_nvme_ctrlr_is_failed(it->second->ctrlr);
+  }
+
+  static void keep_alive_routine_event(void * arg1, void * arg2){
+    Timer * t = (Timer *) arg1;
+
+    int rc;
+    if (t->hasTimedOut()){
+      for(auto& ctrl : controllers){
+        rc = spdk_nvme_ctrlr_process_admin_completions(ctrl->ctrlr);
+        if (rc < 0)
+          std::cout << "TimedOut -> ERROR -> value of rc is " << rc << '\n';
+      }
+      t->schedule();
+    }
+
+    struct spdk_event * e = spdk_event_allocate(t->core,keep_alive_routine_event,t,NULL);
+    spdk_event_call(e);
+  }
+
+  void keep_alive_routine(uint64_t interval){
+    Timer * t = new Timer(interval,spdk_env_get_last_core());
+    t->schedule();
+
+    struct spdk_event * e = spdk_event_allocate(t->core,keep_alive_routine_event,t,NULL);
+    spdk_event_call(e);
   }
 }

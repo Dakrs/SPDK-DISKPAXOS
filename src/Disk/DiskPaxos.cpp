@@ -24,6 +24,7 @@ extern "C" {
 #include <atomic>
 #include <algorithm>
 #include <future>
+#include <chrono>
 #include "Disk/SPDK_ENV.hpp"
 
 using namespace std;
@@ -551,7 +552,7 @@ static void read_complete(void *arg,const struct spdk_nvme_cpl *completion){
 
 	spdk_free(dO->buffer);
 	dO->status = 1;
-	SPDK_ENV::SCHEDULE_EVENTS[dp->target_core]--;
+	//SPDK_ENV::SCHEDULE_EVENTS[dp->target_core]--;
 }
 
 static void read_full_line(string disk_id,int tick,DiskPaxos::DiskPaxos * dp){
@@ -602,7 +603,7 @@ static void write_complete(void *arg,const struct spdk_nvme_cpl *completion){
 	}
 	dO->dp->n_events--;
 	dO->status = 1;
-	SPDK_ENV::SCHEDULE_EVENTS[dO->target_core]--;
+	//SPDK_ENV::SCHEDULE_EVENTS[dO->target_core]--;
 }
 
 void DiskPaxos::DiskPaxos::ReadAndWrite(){
@@ -727,7 +728,7 @@ static void write_commit_complete(void *arg,const struct spdk_nvme_cpl *completi
 		struct spdk_event * e = spdk_event_allocate(dp->target_core,cleanup,dp,NULL);
 		spdk_event_call(e);
 	}
-	SPDK_ENV::SCHEDULE_EVENTS[dp->target_core]--;
+	//SPDK_ENV::SCHEDULE_EVENTS[dp->target_core]--;
 }
 
 void DiskPaxos::DiskPaxos::Commit(){
@@ -784,7 +785,7 @@ static void simple_write_complete(void *arg,const struct spdk_nvme_cpl *completi
 
 	spdk_free(dO->buffer);
 	dO->status = 1;
-	SPDK_ENV::SCHEDULE_EVENTS[dO->target_core]--;
+	//SPDK_ENV::SCHEDULE_EVENTS[dO->target_core]--;
 }
 
 static void internal_proposal(void * arg1, void * arg2){
@@ -1020,10 +1021,10 @@ static void leader_read_completion(void *arg,const struct spdk_nvme_cpl *complet
 
 		//bool res = SPDK_ENV::reconnect(ld_opt->disk_id,ld_opt->target_core,10);
 		//std::cout << "reconnect = " << res << '\n';
-
+		std::cout << "EVENT_COUNT: " << SPDK_ENV::SCHEDULE_EVENTS[ld_opt->target_core] << '\n';
 		exit(-1);
 	}
-	SPDK_ENV::SCHEDULE_EVENTS[ld_opt->target_core]--;
+	//SPDK_ENV::SCHEDULE_EVENTS[ld_opt->target_core]--;
 
 	if (ld->status){ //already ended the read from a majority of disks
 		ld->n_events--;
@@ -1090,6 +1091,22 @@ static void read_list_proposals(void * arg1,void * arg2){
 
 	for(auto disk_id: SPDK_ENV::addresses){
 		it = SPDK_ENV::namespaces.find(disk_id);
+
+		/**
+		using namespace std::chrono_literals;
+		std::cout << "Sleeping" << std::endl;
+		std::this_thread::sleep_for(5000ms);
+		a = spdk_nvme_ctrlr_process_admin_completions(it->second->ctrlr);
+		std::cout << "5sec a= " << a << std::endl;
+
+		std::this_thread::sleep_for(5000ms);
+		a = spdk_nvme_ctrlr_process_admin_completions(it->second->ctrlr);
+		std::cout << "10sec a= " << a << std::endl;
+		std::this_thread::sleep_for(5000ms);
+		a = spdk_nvme_ctrlr_process_admin_completions(it->second->ctrlr);
+		std::cout << "15sec a= " << a << std::endl;
+		std::cout << "Wook up" << std::endl;
+		*/
 
 		if (it != SPDK_ENV::namespaces.end()){
 
@@ -1197,7 +1214,7 @@ static void read_decision_completion(void *arg,const struct spdk_nvme_cpl *compl
 	}
 	DecisionRead * ld = ld_opt->dr;
 
-	SPDK_ENV::SCHEDULE_EVENTS[ld_opt->target_core]--;
+	//SPDK_ENV::SCHEDULE_EVENTS[ld_opt->target_core]--;
 
 	if (ld->status){ //already ended the read from a majority of disks
 		ld->n_events--;
@@ -1356,7 +1373,7 @@ static void read_multiple_decision_completion(void *arg,const struct spdk_nvme_c
 		exit(1);
 	}
 	MultipleDecisionRead * ld = ld_opt->dr;
-	SPDK_ENV::SCHEDULE_EVENTS[ld_opt->target_core]--;
+	//SPDK_ENV::SCHEDULE_EVENTS[ld_opt->target_core]--;
 
 	if (ld->status){ //already ended the read from a majority of disks
 		ld->n_events--;

@@ -12,6 +12,8 @@ else
     sudo apt-get install -y pkg-config
 fi
 
+sudo apt-get update
+
 cd /home/diogosobral98
 
 sudo -u diogosobral98 git clone https://github.com/spdk/spdk

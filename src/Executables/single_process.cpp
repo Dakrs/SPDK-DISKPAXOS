@@ -140,6 +140,7 @@ int main(int argc, char *argv[]) {
 
 
   LeaderPaxos::LeaderPaxos lp(PID,N_LANES);
+  std::cout << "What's up" << '\n';
   std::thread leader_thread(&LeaderPaxos::LeaderPaxos::run,&lp);
   MultiReplicaPaxos::MultiReplicaPaxos rp(PID,N_LANES);
   rp.run();
