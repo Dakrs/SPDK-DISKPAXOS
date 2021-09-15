@@ -52,8 +52,8 @@ namespace SPDK_ENV {
     struct spdk_nvme_io_qpair_opts qpair_opts;
     spdk_nvme_ctrlr_get_default_io_qpair_opts(ctrlr,&qpair_opts,sizeof(struct spdk_nvme_io_qpair_opts));
 
-    qpair_opts.io_queue_size = 16383;
-    qpair_opts.io_queue_requests = 16383;
+    qpair_opts.io_queue_size = 2048;
+    qpair_opts.io_queue_requests = 2048;
     std::cout << "NS default qpair size: " << qpair_opts.io_queue_size << " default request: " << qpair_opts.io_queue_requests << '\n';
 
     NVME_NAMESPACE_MULTITHREAD * my_ns = new NVME_NAMESPACE_MULTITHREAD(ctrlr,ns);
