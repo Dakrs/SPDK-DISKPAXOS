@@ -29,7 +29,7 @@ namespace SPDK_ENV {
   extern int NUM_CONCENSOS_LANES;
   extern uint32_t NEXT_CORE;
   extern uint32_t NEXT_CORE_REPLICA;
-	extern int SCHEDULE_EVENTS[MAX_NUMBER_CORES];
+	extern uint32_t SCHEDULE_EVENTS[MAX_NUMBER_CORES];
 
   struct NVME_CONTROLER_V2 {
     struct spdk_nvme_ctrlr *ctrlr;

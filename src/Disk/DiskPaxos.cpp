@@ -482,7 +482,7 @@ static void verify_event(void * arg1, void * arg2){
 		map<uint32_t,struct spdk_nvme_qpair	*>::iterator it_qpair;
 		it_qpair = it->second->qpairs.find(dO->target_core);
 
-		spdk_nvme_qpair_process_completions(it_qpair->second, 1);
+		spdk_nvme_qpair_process_completions(it_qpair->second, 0);
 
 		struct spdk_event * e = spdk_event_allocate(dO->target_core,verify_event,dO,NULL);
 		spdk_event_call(e);
@@ -983,7 +983,7 @@ static void verify_event_leader(void * arg1, void * arg2){
 		map<uint32_t,struct spdk_nvme_qpair	*>::iterator it_qpair;
 		it_qpair = it->second->qpairs.find(dO->target_core);
 
-		spdk_nvme_qpair_process_completions(it_qpair->second, 1);
+		spdk_nvme_qpair_process_completions(it_qpair->second, 0);
 
 		struct spdk_event * e = spdk_event_allocate(dO->target_core,verify_event_leader,dO,NULL);
 		spdk_event_call(e);
@@ -1252,7 +1252,7 @@ static void verify_event_decision(void * arg1, void * arg2){
 		map<uint32_t,struct spdk_nvme_qpair	*>::iterator it_qpair;
 		it_qpair = it->second->qpairs.find(dO->target_core);
 
-		spdk_nvme_qpair_process_completions(it_qpair->second, 1);
+		spdk_nvme_qpair_process_completions(it_qpair->second, 0);
 
 		struct spdk_event * e = spdk_event_allocate(dO->target_core,verify_event_decision,dO,NULL);
 		spdk_event_call(e);
@@ -1351,7 +1351,7 @@ static void verify_event_multiple_decision(void * arg1, void * arg2){
 		map<uint32_t,struct spdk_nvme_qpair	*>::iterator it_qpair;
 		it_qpair = it->second->qpairs.find(dO->target_core);
 
-		spdk_nvme_qpair_process_completions(it_qpair->second, 1);
+		spdk_nvme_qpair_process_completions(it_qpair->second, 0);
 
 		struct spdk_event * e = spdk_event_allocate(dO->target_core,verify_event_multiple_decision,dO,NULL);
 		spdk_event_call(e);

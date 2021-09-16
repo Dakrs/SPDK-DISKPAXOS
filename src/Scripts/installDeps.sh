@@ -7,9 +7,15 @@ else
 fi
 
 if command -v pkg-config >/dev/null 2>&1 ; then
-    echo "git found"
+    echo "pkg-config found"
 else
     sudo apt-get install -y pkg-config
+fi
+
+if command -v bc >/dev/null 2>&1 ; then
+    echo "bc found"
+else
+    sudo apt-get install -y bc
 fi
 
 sudo apt-get update

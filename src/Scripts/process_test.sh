@@ -111,7 +111,7 @@ max=$(expr $PROCESSES - 1)
 for i in `seq 0 $max`
 do
   echo -e "\t Launching Process $i"
-  (sudo ./DiskPaxos_SimpleProcess --processes $PROCESSES --lanes $LANES --pid $i --cpumask 0x$(echo "2^($i+1)"| bc)) &> logs/log_pid_$i.log &
+  (sudo ./DiskPaxos_SimpleProcess --processes $PROCESSES --lanes $LANES --pid $i --cpumask 0x$(echo "2^($i+1)"| bc)) &> logs/log_pid_$i.log && echo -e "\tProcess $i exited successfully" &
 done
 echo -e "\nFinished Launching consensus processes"
 echo -e "Waiting for the completion of the consensus"

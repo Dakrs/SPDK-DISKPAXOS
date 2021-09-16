@@ -12,7 +12,7 @@ namespace SPDK_ENV {
   int NUM_CONCENSOS_LANES = 0;
   uint32_t NEXT_CORE = 0;
   uint32_t NEXT_CORE_REPLICA = 0;
-  int SCHEDULE_EVENTS[MAX_NUMBER_CORES];
+  uint32_t SCHEDULE_EVENTS[MAX_NUMBER_CORES];
 
 
   std::set<std::string> crtl_addresses;
@@ -197,6 +197,31 @@ namespace SPDK_ENV {
   	std::cout << "Succeded: CPU_CORES -> " << spdk_env_get_core_count() << std::endl;
   }
 
+  static void cleanup_old_requests(){
+    uint32_t total = 0;
+    for (int i = 0; i < MAX_NUMBER_CORES; i++) {
+      total += SCHEDULE_EVENTS[i];
+    }
+
+    while (total > 0) {
+      for(const auto& ns_entry : namespaces){
+        const std::unique_ptr<NVME_NAMESPACE_MULTITHREAD>& ns = ns_entry.second;
+
+        for (const auto& any : ns->qpairs) {
+           struct spdk_nvme_qpair	* qpair = any.second;
+           int rc = spdk_nvme_qpair_process_completions(qpair,0);
+
+           if (rc >= 0)
+              total -= rc;
+           else{
+             std::cout << "ERROR on cleanup_old_requests" << '\n';
+             exit(-1);
+           }
+        }
+      }
+    }
+  }
+
   static void run_spdk_event_framework(const char * CPU_MASK){
     struct spdk_app_opts app_opts = {};
     spdk_app_opts_init(&app_opts, sizeof(app_opts));
@@ -209,6 +234,7 @@ namespace SPDK_ENV {
   		std::cout << "Error might have occured" << std::endl;
   	}
 
+    cleanup_old_requests();
   	cleanup();
   	//spdk_vmd_fini();
 
@@ -230,6 +256,7 @@ namespace SPDK_ENV {
       std::cout << "Error might have occured" << std::endl;
     }
 
+    cleanup_old_requests();
     cleanup();
     //spdk_vmd_fini();
 
