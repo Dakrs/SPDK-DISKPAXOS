@@ -99,7 +99,7 @@ max_disks=$(expr $DISKS - 1)
 for i in `seq 0 $max_disks`
 do
   echo -e "\tReseting nqn.2016-06.io.spdk:cnode$(expr $i + 1)"
-  (sudo ./Reset --processes $PROCESSES --lanes $LANES --proposals $((PROPOSALS * 5)) --diskid nqn.2016-06.io.spdk:cnode$(expr $i + 1) --port $(expr $i + 1 + 4420) --subnqn nqn.2016-06.io.spdk:cnode$(expr $i + 1) &> logs/reset_cnode$(expr $i + 1).log) || error_control "Cleaning Disk cnode$(expr $i + 1)"
+  (sudo ./Reset --processes $PROCESSES --lanes $LANES --proposals $((PROPOSALS * 5)) --ip 127.0.0.1 --diskid nqn.2016-06.io.spdk:cnode$(expr $i + 1) --port $(expr $i + 1 + 4420) --subnqn nqn.2016-06.io.spdk:cnode$(expr $i + 1) &> logs/reset_cnode$(expr $i + 1).log) || error_control "Cleaning Disk cnode$(expr $i + 1)"
   echo -e "\tReset on nqn.2016-06.io.spdk:cnode$(expr $i + 1) was successful"
 done
 
@@ -111,7 +111,7 @@ max=$(expr $PROCESSES - 1)
 for i in `seq 0 $max`
 do
   echo -e "\t Launching Process $i"
-  (sudo ./DiskPaxos_SimpleProcess --processes $PROCESSES --lanes $LANES --pid $i --cpumask 0x$(echo "2^($i+1)"| bc)) &> logs/log_pid_$i.log && echo -e "\tProcess $i exited successfully" &
+  (sudo ./DiskPaxos_SimpleProcess --processes $PROCESSES --lanes $LANES --pid $i --nvmf "trtype:TCP adrfam:IPv4 traddr:127.0.0.1 trsvcid:4420 subnqn:nqn.2014-08.org.nvmexpress.discovery;" --cpumask 0x$(echo "2^($i+1)"| bc)) &> logs/log_pid_$i.log && echo -e "\tProcess $i exited successfully" &
 done
 echo -e "\nFinished Launching consensus processes"
 echo -e "Waiting for the completion of the consensus"

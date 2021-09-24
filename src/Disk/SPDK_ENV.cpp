@@ -14,7 +14,6 @@ namespace SPDK_ENV {
   uint32_t NEXT_CORE_REPLICA = 0;
   uint32_t SCHEDULE_EVENTS[MAX_NUMBER_CORES];
 
-
   std::set<std::string> crtl_addresses;
   std::set<std::string> addresses; //set a string identifying every disk
   std::vector<std::unique_ptr<NVME_CONTROLER_V2>> controllers; //vector with all controller structures allocated
@@ -22,6 +21,51 @@ namespace SPDK_ENV {
 
   std::atomic<bool> ready(false); //flag to make sure spdk libray has started
   std::thread internal_spdk_event_launcher; //internal thread to coordinate spdk.
+
+
+  SPDK_ENV_OPTS::SPDK_ENV_OPTS(int n_p,int n_k,std::string CPU_MASK){
+    this->qpair_io_queue_size = 2048;
+    this->qpair_io_queue_requests = 2048;
+    this->NUM_PROCESSES = n_p;
+    this->NUM_CONCENSOS_LANES = n_k;
+    this->reactor_mask = CPU_MASK;
+    this->name = "EventTest";
+  }
+
+  SPDK_ENV_OPTS::SPDK_ENV_OPTS(int n_p,int n_k,std::string CPU_MASK,std::string name,uint32_t queue_size,uint32_t queue_requests){
+    this->qpair_io_queue_size = queue_size;
+    this->qpair_io_queue_requests = queue_requests;
+    this->NUM_PROCESSES = n_p;
+    this->NUM_CONCENSOS_LANES = n_k;
+    this->reactor_mask = CPU_MASK;
+    this->name = name;
+  }
+
+  SPDK_ENV_OPTS::~SPDK_ENV_OPTS(){}
+
+  struct INTERNAL_SPDK_ENV_OPTS {
+    uint32_t qpair_io_queue_size;
+		uint32_t qpair_io_queue_requests;
+    std::string name;
+		std::string reactor_mask;
+    std::vector<std::string> * trids;
+
+    INTERNAL_SPDK_ENV_OPTS(SPDK_ENV_OPTS & opts,std::vector<std::string> * trids_tmp){
+      this->qpair_io_queue_size = opts.qpair_io_queue_size;
+      this->qpair_io_queue_requests = opts.qpair_io_queue_requests;
+      this->name = opts.name;
+      this->reactor_mask = opts.reactor_mask;
+      this->trids = trids_tmp;
+    };
+    INTERNAL_SPDK_ENV_OPTS(std::vector<std::string> * trids_tmp){
+      this->qpair_io_queue_size = 2048;
+      this->qpair_io_queue_requests = 2048;
+      this->name = "";
+      this->reactor_mask = "";
+      this->trids = trids_tmp;
+    };
+    ~INTERNAL_SPDK_ENV_OPTS(){};
+  };
 
   void Timer::schedule(){
     this->next = spdk_get_ticks() + this->interval * spdk_get_ticks_hz();
@@ -44,7 +88,7 @@ namespace SPDK_ENV {
     }*/
     return true;
   }
-  static int register_ns(struct spdk_nvme_ctrlr *ctrlr,struct spdk_nvme_ns *ns,const struct spdk_nvme_transport_id *trid,int nsid){
+  static int register_ns(struct spdk_nvme_ctrlr *ctrlr,struct spdk_nvme_ns *ns,const struct spdk_nvme_transport_id *trid,int nsid,void *cb_ctx){
     if (!spdk_nvme_ns_is_active(ns)) {
   		return -1;
   	}
@@ -52,8 +96,15 @@ namespace SPDK_ENV {
     struct spdk_nvme_io_qpair_opts qpair_opts;
     spdk_nvme_ctrlr_get_default_io_qpair_opts(ctrlr,&qpair_opts,sizeof(struct spdk_nvme_io_qpair_opts));
 
-    qpair_opts.io_queue_size = 2048;
-    qpair_opts.io_queue_requests = 2048;
+    if (cb_ctx != NULL){
+      INTERNAL_SPDK_ENV_OPTS * env_opts = (INTERNAL_SPDK_ENV_OPTS *) cb_ctx;
+      qpair_opts.io_queue_size = env_opts->qpair_io_queue_size;
+      qpair_opts.io_queue_requests = env_opts->qpair_io_queue_requests;
+    }
+    else{
+      qpair_opts.io_queue_size = 2000;
+      qpair_opts.io_queue_requests = 2000;
+    }
     std::cout << "NS default qpair size: " << qpair_opts.io_queue_size << " default request: " << qpair_opts.io_queue_requests << '\n';
 
     NVME_NAMESPACE_MULTITHREAD * my_ns = new NVME_NAMESPACE_MULTITHREAD(ctrlr,ns);
@@ -105,7 +156,7 @@ namespace SPDK_ENV {
   		if (ns == NULL) {
   			continue;
   		}
-  		register_ns(ctrlr, ns, trid,nsid);
+  		register_ns(ctrlr, ns, trid,nsid,cb_ctx);
       //if (!res)
         //break; // só quero o primeiro namespace
   	}
@@ -133,9 +184,11 @@ namespace SPDK_ENV {
   	}
   }
 
-  static bool probe_nvmf(std::vector<std::string> * trids){
+  static bool probe_nvmf(INTERNAL_SPDK_ENV_OPTS * env_opts){
     int successfull_hooks = 0;
     struct spdk_nvme_transport_id connect_id;
+
+    std::vector<std::string> * trids = env_opts->trids;
 
     for(auto s_trids : (*trids)){
       connect_id = {};
@@ -148,7 +201,7 @@ namespace SPDK_ENV {
 
       std::cout << "trid: " << trid << '\n';
 
-      int rc = spdk_nvme_probe(&connect_id, NULL, probe_cb, attach_cb, NULL);
+      int rc = spdk_nvme_probe(&connect_id, env_opts, probe_cb, attach_cb, NULL);
 
       if (rc != 0) {
     		fprintf(stderr, "spdk_nvme_probe() failed\n");
@@ -178,8 +231,8 @@ namespace SPDK_ENV {
       }
     }
     else{
-      std::vector<std::string> * trids = (std::vector<std::string> *) arg;
-      bool status = probe_nvmf(trids);
+      INTERNAL_SPDK_ENV_OPTS * env_opts = (INTERNAL_SPDK_ENV_OPTS *) arg;
+      bool status = probe_nvmf(env_opts);
 
       if (!status) {
         fprintf(stderr, "spdk_nvme_probe() failed\n");
@@ -250,7 +303,9 @@ namespace SPDK_ENV {
     app_opts.name = "event_test";
     app_opts.reactor_mask = CPU_MASK;
 
-    int rc = spdk_app_start(&app_opts, app_init, trids);
+    INTERNAL_SPDK_ENV_OPTS * int_env_opts = new INTERNAL_SPDK_ENV_OPTS(trids);
+
+    int rc = spdk_app_start(&app_opts, app_init, int_env_opts);
 
     if (rc){
       std::cout << "Error might have occured" << std::endl;
@@ -259,6 +314,8 @@ namespace SPDK_ENV {
     cleanup_old_requests();
     cleanup();
     //spdk_vmd_fini();
+
+    delete int_env_opts;
 
     spdk_app_fini();
   }
@@ -289,6 +346,43 @@ namespace SPDK_ENV {
 
     return 0;
   }
+
+  static void run_spdk_event_framework_nvmf_opts(INTERNAL_SPDK_ENV_OPTS * env_opts){
+    struct spdk_app_opts app_opts = {};
+    spdk_app_opts_init(&app_opts, sizeof(app_opts));
+    app_opts.name = env_opts->name.c_str();
+    app_opts.reactor_mask = env_opts->reactor_mask.c_str();
+
+    int rc = spdk_app_start(&app_opts, app_init, env_opts);
+
+    if (rc){
+      std::cout << "Error might have occured" << std::endl;
+    }
+
+    cleanup_old_requests();
+    cleanup();
+    //spdk_vmd_fini();
+
+    spdk_app_fini();
+  }
+
+  int spdk_start(SPDK_ENV_OPTS & env_opts,std::vector<std::string>& trids){
+    NUM_PROCESSES = env_opts.NUM_PROCESSES;
+  	NUM_CONCENSOS_LANES = env_opts.NUM_CONCENSOS_LANES;
+
+    std::vector<std::string> * v_aux = new std::vector<std::string> ();
+    for(auto trid : trids)
+      v_aux->push_back(trid);
+
+    INTERNAL_SPDK_ENV_OPTS * int_env_opts = new INTERNAL_SPDK_ENV_OPTS(env_opts,v_aux);
+
+    internal_spdk_event_launcher = std::thread(run_spdk_event_framework_nvmf_opts,int_env_opts);
+
+    while(!ready);
+
+    return 0;
+  }
+
 
   void spdk_end() {
     std::cout << "Shutting down SPDK Framework" << std::endl;

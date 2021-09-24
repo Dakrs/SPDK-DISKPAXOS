@@ -65,6 +65,12 @@ int main(int argc, char *argv[]) {
   bool local = false;
 
   std::string cpumask = "";
+  std::vector<std::string> trids;
+
+  std::string s;
+  std::string delimiter = ";";
+  size_t pos = 0;
+  std::string token;
 
   const struct option longopts[] =
   {
@@ -74,13 +80,14 @@ int main(int argc, char *argv[]) {
     {"local",no_argument,0, 'b'},
     {"help",no_argument,0,'h'},
     {"cpumask",required_argument,0,'m'},
+    {"nvmf",required_argument,0,'s'},
     {0,0,0,0},
   };
 
   int option_index = 0;
   int c;
   while (1) {
-    c = getopt_long(argc, argv, "n:l:bi:h",longopts, &option_index);
+    c = getopt_long(argc, argv, "n:l:bi:hs:",longopts, &option_index);
     if (c == -1){
       break;
     }
@@ -108,6 +115,15 @@ int main(int argc, char *argv[]) {
           cpumask = std::string(optarg);
           std::cout << "Using CPU Mask: " << cpumask << std::endl;
           break;
+      case 's':
+          s = std::string(optarg);
+          while ((pos = s.find(delimiter)) != std::string::npos) {
+              token = s.substr(0, pos);
+              std::cout << token << std::endl;
+              trids.push_back(token);
+              s.erase(0, pos + delimiter.length());
+          }
+          break;
       case 'h':
           helpFunction();
           exit(1);
@@ -127,22 +143,22 @@ int main(int argc, char *argv[]) {
   //std::vector<std::string> example {"trtype:TCP adrfam:IPv4 traddr:127.0.0.1 trsvcid:4420 subnqn:nqn.2016-06.io.spdk:cnode1"};
   const char * c_mask = cpumask.c_str();
 
+  SPDK_ENV::SPDK_ENV_OPTS env_opts(N_PROCESSES,N_LANES,cpumask,"DiskPaxosEnv",2048,2048);
+
   if (local){
     SPDK_ENV::spdk_start(N_PROCESSES,N_LANES,c_mask);
   }
   else{
-    std::vector<std::string> trids {
-      "trtype:TCP adrfam:IPv4 traddr:127.0.0.1 trsvcid:4420 subnqn:nqn.2014-08.org.nvmexpress.discovery"
-    };
-    SPDK_ENV::spdk_start(N_PROCESSES,N_LANES,c_mask,trids);
+    SPDK_ENV::spdk_start(env_opts,trids);
   }
 
+  MultiReplicaPaxos::MultiReplicaPaxosOpts replica_opts(N_LANES,N_LANES,500);
+  LeaderPaxos::LeaderPaxosOpts leader_opts(N_LANES,N_LANES);
 
-
-  LeaderPaxos::LeaderPaxos lp(PID,N_LANES);
+  LeaderPaxos::LeaderPaxos lp(PID,leader_opts);
   std::cout << "What's up" << '\n';
   std::thread leader_thread(&LeaderPaxos::LeaderPaxos::run,&lp);
-  MultiReplicaPaxos::MultiReplicaPaxos rp(PID,N_LANES);
+  MultiReplicaPaxos::MultiReplicaPaxos rp(PID,replica_opts);
   rp.run();
   std::cout << "Exiting and starting spdk closure" << '\n';
   leader_thread.join();

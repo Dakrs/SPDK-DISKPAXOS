@@ -60,6 +60,7 @@ int main(int argc, char *argv[]) {
   std::string disk_string = "";
   std::string subnqn = "";
   std::string port = "";
+  std::string ip = "";
 
   const struct option longopts[] =
   {
@@ -71,13 +72,14 @@ int main(int argc, char *argv[]) {
     {"help",no_argument,0,'h'},
     {"subnqn",required_argument,0,'s'},
     {"port",required_argument,0,'o'},
+    {"ip",required_argument,0,'t'},
     {0,0,0,0},
   };
 
   int option_index = 0;
   int c;
   while (1) {
-    c = getopt_long(argc, argv, "n:l:p:bi:h",longopts, &option_index);
+    c = getopt_long(argc, argv, "n:l:p:bi:ht:",longopts, &option_index);
     if (c == -1){
       break;
     }
@@ -113,6 +115,10 @@ int main(int argc, char *argv[]) {
           port = std::string(optarg);
           std::cout << "port: " << port << std::endl;
           break;
+      case 't':
+          ip = std::string(optarg);
+          std::cout << "ip: " << ip << std::endl;
+          break;
       case 'h':
           helpFunction();
           exit(1);
@@ -136,7 +142,7 @@ int main(int argc, char *argv[]) {
     trid = NULL;
   }
   else{
-    snprintf(trid,300,"trtype:TCP adrfam:IPv4 traddr:127.0.0.1 trsvcid:%s subnqn:%s",port.c_str(),subnqn.c_str());
+    snprintf(trid,300,"trtype:TCP adrfam:IPv4 traddr:%s trsvcid:%s subnqn:%s",ip.c_str(),port.c_str(),subnqn.c_str());
     //strcpy(trid,"trtype:TCP adrfam:IPv4 traddr:127.0.0.1 trsvcid:4421 subnqn:nqn.2016-06.io.spdk:cnode2");
   }
 

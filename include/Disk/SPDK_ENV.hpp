@@ -31,6 +31,19 @@ namespace SPDK_ENV {
   extern uint32_t NEXT_CORE_REPLICA;
 	extern uint32_t SCHEDULE_EVENTS[MAX_NUMBER_CORES];
 
+	struct SPDK_ENV_OPTS {
+		uint32_t qpair_io_queue_size;
+		uint32_t qpair_io_queue_requests;
+		int NUM_PROCESSES;
+		int NUM_CONCENSOS_LANES;
+		std::string name;
+		std::string reactor_mask;
+
+		SPDK_ENV_OPTS(int n_p,int n_k,std::string CPU_MASK);
+		SPDK_ENV_OPTS(int n_p,int n_k,std::string CPU_MASK,std::string Name,uint32_t queue_size,uint32_t queue_requests);
+		~SPDK_ENV_OPTS();
+	};
+
   struct NVME_CONTROLER_V2 {
     struct spdk_nvme_ctrlr *ctrlr;
     std::string name;
@@ -88,6 +101,7 @@ namespace SPDK_ENV {
 
   int spdk_start(int n_p,int n_k,const char * CPU_MASK);
 	int spdk_start(int n_p,int n_k,const char * CPU_MASK,std::vector<std::string>& trids);
+	int spdk_start(SPDK_ENV_OPTS & env_opts,std::vector<std::string>& trids);
   void spdk_end();
   uint32_t allocate_leader_core();
   uint32_t allocate_replica_core();

@@ -14,13 +14,48 @@
 #include <memory>
 
 namespace MultiReplicaPaxos {
+  MultiReplicaPaxosOpts::MultiReplicaPaxosOpts(int dec,int lanes,int interval){
+    this->decisions_read_amount = dec;
+    this->number_of_lanes = lanes;
+    this->proposal_interval = interval;
+  }
+
+  MultiReplicaPaxosOpts::MultiReplicaPaxosOpts(int dec,int lanes){
+    this->decisions_read_amount = dec;
+    this->number_of_lanes = lanes;
+    this->proposal_interval = 5.0;
+  }
+
+  MultiReplicaPaxosOpts::MultiReplicaPaxosOpts(int lanes){
+    this->decisions_read_amount = lanes;
+    this->number_of_lanes = lanes;
+    this->proposal_interval = 5.0;
+  }
+
+  MultiReplicaPaxosOpts::MultiReplicaPaxosOpts(){
+    this->decisions_read_amount = 32;
+    this->number_of_lanes = 32;
+    this->proposal_interval = 5.0;
+  }
+
+  MultiReplicaPaxosOpts::~MultiReplicaPaxosOpts(){}
+
+  void MultiReplicaPaxosOpts::print(){
+    std::cout << "MultiReplicaPaxosOpts Configs" << '\n';
+    std::cout << "Decisions read amount: " << this->decisions_read_amount << std::endl;
+    std::cout << "Number of Lanes: " << this->number_of_lanes << std::endl;
+    std::cout << "Proposal Interval: " << this->proposal_interval << std::endl;
+  }
+
+
+
   MultiReplicaPaxos::MultiReplicaPaxos(int pid,int n_lanes){
     this->pid = pid;
     this->slot = 0;
     this->l_core = -1;
     this->searching = false;
     this->received_decisions = 0;
-    this->N_LANES = n_lanes;
+    this->opts = MultiReplicaPaxosOpts(n_lanes);
   }
 
   MultiReplicaPaxos::MultiReplicaPaxos(int pid,int l_core,int n_lanes){
@@ -29,19 +64,29 @@ namespace MultiReplicaPaxos {
     this->l_core = l_core;
     this->searching = false;
     this->received_decisions = 0;
-    this->N_LANES = n_lanes;
+    this->opts = MultiReplicaPaxosOpts(n_lanes);
+  }
+
+  MultiReplicaPaxos::MultiReplicaPaxos(int pid,MultiReplicaPaxosOpts & opts_tmp){
+    this->pid = pid;
+    this->slot = 0;
+    this->l_core = -1;
+    this->searching = false;
+    this->received_decisions = 0;
+    this->opts = std::move(opts_tmp);
   }
 
   MultiReplicaPaxos::~MultiReplicaPaxos(){
   }
 
   void MultiReplicaPaxos::run(){
-    using namespace std::chrono_literals;
+    //using namespace std::chrono_literals;
 
     std::string filename = "example_files/input-" + std::to_string(this->pid);
     std::ifstream infile(filename);
     std::string line;
     //int n_lines = 0;
+    int x = 500;
 
     std::vector<std::string> lines;
     try{
@@ -50,7 +95,7 @@ namespace MultiReplicaPaxos {
         if (i >= this->received_decisions)
           this->decisionsTosolve.insert(i);
         this->handle_possible_decisions();
-        std::this_thread::sleep_for(0.5ms);
+        std::this_thread::sleep_for(std::chrono::microseconds(x));
       }
 
       while(this->decisionsTosolve.size() > 0 && this->slot != this->received_decisions)
@@ -106,7 +151,7 @@ namespace MultiReplicaPaxos {
   void MultiReplicaPaxos::handle_possible_decisions(){
     if (!this->searching){
       this->searching = true;
-      this->new_decisions = DiskPaxos::read_multiple_decisions(this->received_decisions,this->N_LANES);
+      this->new_decisions = DiskPaxos::read_multiple_decisions(this->received_decisions,this->opts.decisions_read_amount);
     }
 
     const auto f_current_state = this->new_decisions.wait_until(std::chrono::system_clock::time_point::min());

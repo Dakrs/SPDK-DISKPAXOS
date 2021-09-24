@@ -14,6 +14,21 @@
 
 
 namespace MultiReplicaPaxos {
+  struct MultiReplicaPaxosOpts {
+    int decisions_read_amount;
+    int number_of_lanes;
+    int proposal_interval;
+
+    MultiReplicaPaxosOpts(int dec,int lanes,int interval);
+    MultiReplicaPaxosOpts(int dec,int lanes);
+    MultiReplicaPaxosOpts(int lanes);
+    MultiReplicaPaxosOpts();
+    ~MultiReplicaPaxosOpts();
+
+    void print();
+  };
+
+
   class MultiReplicaPaxos {
     std::unordered_set<std::string> received_commands;
     std::map<int,std::string> decisions;
@@ -25,11 +40,12 @@ namespace MultiReplicaPaxos {
     int pid;
     int l_core;
     int received_decisions;
-    int N_LANES;
+    MultiReplicaPaxosOpts opts;
 
     public:
       MultiReplicaPaxos(int pid, int n_lanes);
       MultiReplicaPaxos(int pid,int l_core, int n_lanes);
+      MultiReplicaPaxos(int pid,MultiReplicaPaxosOpts & opts_tmp);
       ~MultiReplicaPaxos();
       void run();
       void output();

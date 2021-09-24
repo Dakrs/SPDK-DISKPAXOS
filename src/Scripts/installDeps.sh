@@ -18,6 +18,12 @@ else
     sudo apt-get install -y bc
 fi
 
+if command -v jq >/dev/null 2>&1 ; then
+    echo "jq found"
+else
+    sudo apt-get install -y jq
+fi
+
 sudo apt-get update
 
 cd /home/diogosobral98

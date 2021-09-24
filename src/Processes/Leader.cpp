@@ -4,12 +4,47 @@
 #include <iostream>
 
 namespace LeaderPaxos {
+
+  LeaderPaxosOpts::LeaderPaxosOpts(int lanes,int read_amount){
+    this->number_of_lanes = lanes;
+    this->number_of_proposals_read = read_amount;
+  }
+
+  LeaderPaxosOpts::LeaderPaxosOpts(int lanes){
+    this->number_of_lanes = lanes;
+    this->number_of_proposals_read = lanes;
+  }
+
+  LeaderPaxosOpts::LeaderPaxosOpts(){
+    this->number_of_lanes = 32;
+    this->number_of_proposals_read = 32;
+  }
+
+  LeaderPaxosOpts::~LeaderPaxosOpts(){}
+
+  void LeaderPaxosOpts::print(){
+    std::cout << "LeaderPaxosOpts Configs" << '\n';
+    std::cout << "Amount Read in each Proposal: " << this->number_of_proposals_read << std::endl;
+    std::cout << "Number of Lanes: " << this->number_of_lanes << std::endl;
+  }
+
   LeaderPaxos::LeaderPaxos(int pid,int NUM_LANES){
-    this->NUM_LANES = NUM_LANES;
+    this->opts = LeaderPaxosOpts(NUM_LANES);
     this->latest_slot = 0;
     this->pid = pid;
     this->slots = std::vector<DiskPaxos::DiskPaxos *>(NUM_LANES,NULL);
     this->queues = std::vector<std::queue<Proposal>>(NUM_LANES, std::queue<Proposal>());
+    this->searching = false;
+    this->aborting = false;
+    this->last_proposal_found = std::chrono::high_resolution_clock::now();
+  }
+
+  LeaderPaxos::LeaderPaxos(int pid,LeaderPaxosOpts & leader_opts){
+    this->opts = std::move(leader_opts);
+    this->latest_slot = 0;
+    this->pid = pid;
+    this->slots = std::vector<DiskPaxos::DiskPaxos *>(this->opts.number_of_lanes,NULL);
+    this->queues = std::vector<std::queue<Proposal>>(this->opts.number_of_lanes, std::queue<Proposal>());
     this->searching = false;
     this->aborting = false;
     this->last_proposal_found = std::chrono::high_resolution_clock::now();
@@ -39,7 +74,7 @@ namespace LeaderPaxos {
   void LeaderPaxos::search(){
     if (!this->searching){
       this->searching = true;
-      this->props = DiskPaxos::read_proposals(this->latest_slot,this->NUM_LANES);
+      this->props = DiskPaxos::read_proposals(this->latest_slot,this->opts.number_of_lanes);
     }
 
     const auto f_current_state = this->props.wait_until(std::chrono::system_clock::time_point::min());
@@ -87,7 +122,7 @@ namespace LeaderPaxos {
         //std::cout << "Proposal for slot: " << blk.slot << " input: " << blk.input << " on PID: " << this->pid << std::endl;
         this->proposals.insert(std::pair<int,Proposal>(slot,Proposal(blk.slot,blk.input)));
 
-        int target_slot = slot % this->NUM_LANES;
+        int target_slot = slot % this->opts.number_of_lanes;
         this->queues[target_slot].push(Proposal(blk.slot,blk.input));
       }
     }
@@ -118,7 +153,7 @@ namespace LeaderPaxos {
       this->search(); //search for incoming proposals;
 
 
-      for (int i = 0; i < this->NUM_LANES; i++) {
+      for (int i = 0; i < this->opts.number_of_lanes; i++) {
         DiskPaxos::DiskPaxos * dp = this->slots[i];
         //se estiver livre ou se já tiver terminado
         if ((dp == NULL && this->queues[i].size() > 0) || (dp != NULL && dp->finished > 0 && this->queues[i].size() > 0)) {
