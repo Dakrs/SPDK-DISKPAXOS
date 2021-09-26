@@ -14,28 +14,19 @@
 #include <memory>
 
 namespace MultiReplicaPaxos {
-  MultiReplicaPaxosOpts::MultiReplicaPaxosOpts(int dec,int lanes,int interval){
+  MultiReplicaPaxosOpts::MultiReplicaPaxosOpts(int dec,int interval){
     this->decisions_read_amount = dec;
-    this->number_of_lanes = lanes;
     this->proposal_interval = interval;
   }
 
-  MultiReplicaPaxosOpts::MultiReplicaPaxosOpts(int dec,int lanes){
+  MultiReplicaPaxosOpts::MultiReplicaPaxosOpts(int dec){
     this->decisions_read_amount = dec;
-    this->number_of_lanes = lanes;
-    this->proposal_interval = 5.0;
-  }
-
-  MultiReplicaPaxosOpts::MultiReplicaPaxosOpts(int lanes){
-    this->decisions_read_amount = lanes;
-    this->number_of_lanes = lanes;
-    this->proposal_interval = 5.0;
+    this->proposal_interval = 500;
   }
 
   MultiReplicaPaxosOpts::MultiReplicaPaxosOpts(){
     this->decisions_read_amount = 32;
-    this->number_of_lanes = 32;
-    this->proposal_interval = 5.0;
+    this->proposal_interval = 500;
   }
 
   MultiReplicaPaxosOpts::~MultiReplicaPaxosOpts(){}
@@ -43,10 +34,8 @@ namespace MultiReplicaPaxos {
   void MultiReplicaPaxosOpts::print(){
     std::cout << "MultiReplicaPaxosOpts Configs" << '\n';
     std::cout << "Decisions read amount: " << this->decisions_read_amount << std::endl;
-    std::cout << "Number of Lanes: " << this->number_of_lanes << std::endl;
     std::cout << "Proposal Interval: " << this->proposal_interval << std::endl;
   }
-
 
 
   MultiReplicaPaxos::MultiReplicaPaxos(int pid,int n_lanes){

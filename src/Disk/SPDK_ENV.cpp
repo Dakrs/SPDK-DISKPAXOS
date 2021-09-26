@@ -41,6 +41,16 @@ namespace SPDK_ENV {
     this->name = name;
   }
 
+  void SPDK_ENV_OPTS::print(){
+    std::cout << "SPDK CONFIG" << '\n';
+    std::cout << "qpair_io_queue_size: " << this->qpair_io_queue_size  << '\n';
+    std::cout << "qpair_io_queue_requests: " << this->qpair_io_queue_requests << '\n';
+    std::cout << "NUM_PROCESSES: " << this->NUM_PROCESSES << '\n';
+    std::cout << "NUM_CONCENSOS_LANES: " << this->NUM_CONCENSOS_LANES << '\n';
+    std::cout << "reactor_mask: " << this->reactor_mask << '\n';
+    std::cout << "name: " << this->name << '\n';
+  }
+
   SPDK_ENV_OPTS::~SPDK_ENV_OPTS(){}
 
   struct INTERNAL_SPDK_ENV_OPTS {

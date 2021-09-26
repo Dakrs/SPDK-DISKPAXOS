@@ -10,6 +10,7 @@ print_config()
   echo -e "Number of Lanes: $LANES"
   echo -e "Number of Disks: $DISKS"
   echo -e "Config File: $CONFIG"
+  echo -e "Config Test File: $TESTCONFIG"
   echo "------------------------------------------"
 }
 
@@ -22,6 +23,7 @@ helpFunction()
    echo -e "\t-d Number of Disks"
    echo -e "\t-c Config File"
    echo -e "\t-m Main Replica"
+   echo -e "\t-t Config Test File"
    exit 1 # Exit script after printing help
 }
 
@@ -31,7 +33,7 @@ error_control()
   exit 1
 }
 
-while getopts "n:p:l:hd:c:m:" opt
+while getopts "n:p:l:hd:c:m:t:" opt
 do
    case "$opt" in
       n ) PROPOSALS="$OPTARG" ;;
@@ -40,6 +42,7 @@ do
       d ) DISKS="$OPTARG" ;;
       c ) CONFIG="$OPTARG" ;;
       m ) MAIN_R="$OPTARG" ;;
+      t ) TESTCONFIG="$OPTARG" ;;
       h ) helpFunction ;;
       ? ) helpFunction ;; # Print helpFunction in case parameter is non-existent
    esac
@@ -105,10 +108,11 @@ print_config
 
 echo -e "Setting up the enviroment\n"
 
+jsonProcesses=$(jq -r '.processes' $CONFIG)
 jsonlist=$(jq -r '.devices' $CONFIG)
         # inside the loop, you cant use the fuction _jq() to get values from each object.
 
-for row in $(echo "${jsonlist}" | jq -r '.[] | @base64'); do
+for row in $(echo "${jsonProcesses}" | jq -r '.[] | @base64'); do
   #statements
   _jq()
   {
@@ -117,6 +121,10 @@ for row in $(echo "${jsonlist}" | jq -r '.[] | @base64'); do
   echo -e "\t Setting up the enviroment for $(_jq '.name')"
   echo -e "\t Generating a set of commands for each process"
   ssh $(_jq '.name') "$(typeset -f set_up_enviroment);$(typeset -f error_control); set_up_enviroment $PROPOSALS $PROCESSES"
+
+  echo -e "\t Copying test configuration file"
+  scp $TESTCONFIG $(_jq '.name'):thesis/Thesis/build/
+
   echo -e "\t Finished Setting up the enviroment for $(_jq '.name')\n"
 done
 
@@ -148,13 +156,12 @@ echo -e "\nEnded Disk Clean UP"
 echo "------------------------------------------"
 echo -e "Launching consensus processes\n"
 
-jsonProcesses=$(jq -r '.processes' $CONFIG)
 trids=$(jq -r '.trids' $CONFIG)
 
 #PROCESSES LANES PID cpumask
 diskpaxos_launch(){
   cd thesis/Thesis/build
-  sudo ./DiskPaxos_SimpleProcess --processes $1 --lanes $2 --pid $3 --cpumask $4 --nvmf "$5" &> logs/log_pid_$3.log
+  sudo ./DiskPaxos_SimpleProcess --processes $1 --lanes $2 --pid $3 --cpumask $4 --nvmf "$5" --config $6 &> logs/log_pid_$3.log
   return 0
 }
 
@@ -165,7 +172,7 @@ for row in $(echo "${jsonProcesses}" | jq -r '.[] | @base64'); do
    echo ${row} | base64 --decode | jq -r ${1}
   }
   echo -e "\t Launching Process $(_jq '.id')"
-  (ssh $(_jq '.name') "$(typeset -f diskpaxos_launch); diskpaxos_launch $PROCESSES $LANES $(_jq '.id') $(_jq '.cpumask') \"$trids\"" && echo -e "\tProcess $(_jq '.id') exited successfully")&
+  (ssh $(_jq '.name') "$(typeset -f diskpaxos_launch); diskpaxos_launch $PROCESSES $LANES $(_jq '.id') $(_jq '.cpumask') \"$trids\"" $(_jq '.config') && echo -e "\tProcess $(_jq '.id') exited successfully")&
 done
 
 echo -e "\nFinished Launching consensus processes"

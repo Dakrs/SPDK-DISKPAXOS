@@ -16,12 +16,10 @@
 namespace MultiReplicaPaxos {
   struct MultiReplicaPaxosOpts {
     int decisions_read_amount;
-    int number_of_lanes;
     int proposal_interval;
 
-    MultiReplicaPaxosOpts(int dec,int lanes,int interval);
-    MultiReplicaPaxosOpts(int dec,int lanes);
-    MultiReplicaPaxosOpts(int lanes);
+    MultiReplicaPaxosOpts(int dec,int interval);
+    MultiReplicaPaxosOpts(int dec);
     MultiReplicaPaxosOpts();
     ~MultiReplicaPaxosOpts();
 

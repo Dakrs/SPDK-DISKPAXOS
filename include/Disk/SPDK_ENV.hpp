@@ -41,6 +41,7 @@ namespace SPDK_ENV {
 
 		SPDK_ENV_OPTS(int n_p,int n_k,std::string CPU_MASK);
 		SPDK_ENV_OPTS(int n_p,int n_k,std::string CPU_MASK,std::string Name,uint32_t queue_size,uint32_t queue_requests);
+		void print();
 		~SPDK_ENV_OPTS();
 	};
 

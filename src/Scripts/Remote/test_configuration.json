@@ -1,0 +1,8 @@
+{
+  "name": "diskpasso_test_script",
+  "qpair_queue_size": "2048",
+  "qpair_queue_request": "2048",
+  "proposal_interval": "500",
+  "read_amount_replica": "32",
+  "number_of_slots_to_read": "32"
+}

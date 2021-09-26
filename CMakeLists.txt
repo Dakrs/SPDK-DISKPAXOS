@@ -81,7 +81,6 @@ add_executable(Reset
 
 function(include_spdk TARGET_NAME)
   target_include_directories (${TARGET_NAME} PUBLIC include)
-  target_include_directories (${TARGET_NAME} PUBLIC ../external)
   target_include_directories (${TARGET_NAME} PUBLIC ${SPDK_DIR}/include)
 
   target_link_libraries (
