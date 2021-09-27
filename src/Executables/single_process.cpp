@@ -209,7 +209,7 @@ int main(int argc, char *argv[]) {
 
   //std::vector<std::string> example {"trtype:TCP adrfam:IPv4 traddr:127.0.0.1 trsvcid:4420 subnqn:nqn.2016-06.io.spdk:cnode1"};
   SPDK_ENV::SPDK_ENV_OPTS env_opts(N_PROCESSES,N_LANES,cpumask,app_name,qpair_queue_size,qpair_queue_request);
-  MultiReplicaPaxos::MultiReplicaPaxosOpts replica_opts(read_amount_replica,proposal_interval);
+  MultiReplicaPaxos::MultiReplicaPaxosOpts replica_opts(read_amount_replica,proposal_interval, config_file.size() > 0);
   LeaderPaxos::LeaderPaxosOpts leader_opts(N_LANES,number_of_slots_to_read);
 
 

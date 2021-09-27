@@ -3,7 +3,7 @@
     {
       "diskid": "0000:00:04.0",
       "nqn": "nqn.2016-06.io.spdk:cnode1",
-      "ip": "10.128.0.40",
+      "ip": "10.128.0.41",
       "port": "4420",
       "cpumask": "0x1",
       "name": "diogosobral98@instance-template-1.us-central1-a.diskpaxos"
@@ -12,10 +12,10 @@
   "processes": [
     {
       "id": "0",
-      "cpumask": "0x2",
+      "cpumask": "0x4",
       "name": "diogosobral98@instance-template-1.us-central1-a.diskpaxos",
       "config": "test_configuration.json"
     }
   ],
-  "trids": "trtype:TCP adrfam:IPv4 traddr:10.128.0.40 trsvcid:4420 subnqn:nqn.2016-06.io.spdk:cnode1;"
+  "trids": "trtype:TCP adrfam:IPv4 traddr:10.128.0.41 trsvcid:4420 subnqn:nqn.2016-06.io.spdk:cnode1;"
 }

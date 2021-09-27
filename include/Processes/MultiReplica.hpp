@@ -17,7 +17,9 @@ namespace MultiReplicaPaxos {
   struct MultiReplicaPaxosOpts {
     int decisions_read_amount;
     int proposal_interval;
+    bool benchmarking;
 
+    MultiReplicaPaxosOpts(int dec,int interval,bool bench);
     MultiReplicaPaxosOpts(int dec,int interval);
     MultiReplicaPaxosOpts(int dec);
     MultiReplicaPaxosOpts();

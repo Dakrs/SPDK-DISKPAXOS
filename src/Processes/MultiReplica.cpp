@@ -14,19 +14,28 @@
 #include <memory>
 
 namespace MultiReplicaPaxos {
+  MultiReplicaPaxosOpts::MultiReplicaPaxosOpts(int dec,int interval,bool bench){
+    this->decisions_read_amount = dec;
+    this->proposal_interval = interval;
+    this->benchmarking = bench;
+  }
+
   MultiReplicaPaxosOpts::MultiReplicaPaxosOpts(int dec,int interval){
     this->decisions_read_amount = dec;
     this->proposal_interval = interval;
+    this->benchmarking = false;
   }
 
   MultiReplicaPaxosOpts::MultiReplicaPaxosOpts(int dec){
     this->decisions_read_amount = dec;
     this->proposal_interval = 500;
+    this->benchmarking = false;
   }
 
   MultiReplicaPaxosOpts::MultiReplicaPaxosOpts(){
     this->decisions_read_amount = 32;
     this->proposal_interval = 500;
+    this->benchmarking = false;
   }
 
   MultiReplicaPaxosOpts::~MultiReplicaPaxosOpts(){}
@@ -75,23 +84,30 @@ namespace MultiReplicaPaxos {
     std::ifstream infile(filename);
     std::string line;
     //int n_lines = 0;
-    int x = 500;
-
-    std::vector<std::string> lines;
+    auto t_start = std::chrono::high_resolution_clock::now();
     try{
       while (std::getline(infile,line)) {
         int i = this->propose(line);
         if (i >= this->received_decisions)
           this->decisionsTosolve.insert(i);
         this->handle_possible_decisions();
-        std::this_thread::sleep_for(std::chrono::microseconds(x));
+        std::this_thread::sleep_for(std::chrono::microseconds(this->opts.proposal_interval));
       }
 
       while(this->decisionsTosolve.size() > 0 && this->slot != this->received_decisions)
         this->handle_possible_decisions();
 
+      auto t_end = std::chrono::high_resolution_clock::now();
+      double elapsed_time_ms = std::chrono::duration<double, std::milli>(t_end-t_start).count();
       this->cleanup();
       std::cout << "Replica quiting after n_props: " << this->slot << " decisons size: " << this->decisions.size() << " pid: " << this->pid << '\n';
+      std::cout << "Time elapsed: " << elapsed_time_ms << " ms" << std::endl;
+
+      if (this->opts.benchmarking){
+        double opt_per_sec = this->decisions.size() / (elapsed_time_ms / 1000);
+        std::cout << "Throughput: " << opt_per_sec << " opts/sec" << std::endl;
+      }
+
       std::cout << "Logging results " << std::endl;
       this->output();
     }
