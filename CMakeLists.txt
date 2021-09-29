@@ -23,6 +23,8 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} \
         -fno-common \
         -DNDEBUG \
         -O2 \
+        -g \
+        -fno-omit-frame-pointer \
         -U_FORTIFY_SOURCE \
         -D_FORTIFY_SOURCE=2 \
         -pthread \

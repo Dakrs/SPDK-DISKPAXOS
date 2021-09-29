@@ -54,6 +54,7 @@ namespace LeaderPaxos {
       void cleanup();
       void search();
       void receive();
+      void manage_consensus();
   };
 }
 

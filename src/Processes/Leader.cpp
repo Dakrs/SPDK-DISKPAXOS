@@ -146,33 +146,36 @@ namespace LeaderPaxos {
     }
   }
 
+  void LeaderPaxos::manage_consensus(){
+    for (int i = 0; i < this->opts.number_of_lanes; i++) {
+      DiskPaxos::DiskPaxos * dp = this->slots[i];
+      //se estiver livre ou se já tiver terminado
+      if ((dp == NULL && this->queues[i].size() > 0) || (dp != NULL && dp->finished > 0 && this->queues[i].size() > 0)) {
+        Proposal p = this->queues[i].front();
+        this->queues[i].pop();
+        if (dp != NULL){
+          //check if a transaction was aborted
+          if (dp->status == 2){
+            this->aborting = true;
+            break;
+          }
+          this->waiting_for_cleanup.insert(std::pair<int,DiskPaxos::DiskPaxos *>(dp->slot,dp));
+        }
+        dp = new DiskPaxos::DiskPaxos(p.command,p.slot,this->pid);
+        this->slots[i] = dp;
+        //DiskPaxos::launch_DiskPaxos(dp,this->pid); // spawns a new instance of the consensus protocol
+        DiskPaxos::launch_DiskPaxos(dp);
+      }
+    }
+  }
+
   void LeaderPaxos::run(){
     std::map<int,Proposal>::iterator it;
 
     while(true){
       this->search(); //search for incoming proposals;
 
-
-      for (int i = 0; i < this->opts.number_of_lanes; i++) {
-        DiskPaxos::DiskPaxos * dp = this->slots[i];
-        //se estiver livre ou se já tiver terminado
-        if ((dp == NULL && this->queues[i].size() > 0) || (dp != NULL && dp->finished > 0 && this->queues[i].size() > 0)) {
-          Proposal p = this->queues[i].front();
-          this->queues[i].pop();
-          if (dp != NULL){
-            //check if a transaction was aborted
-            if (dp->status == 2){
-              this->aborting = true;
-              break;
-            }
-            this->waiting_for_cleanup.insert(std::pair<int,DiskPaxos::DiskPaxos *>(dp->slot,dp));
-          }
-          dp = new DiskPaxos::DiskPaxos(p.command,p.slot,this->pid);
-          this->slots[i] = dp;
-          //DiskPaxos::launch_DiskPaxos(dp,this->pid); // spawns a new instance of the consensus protocol
-          DiskPaxos::launch_DiskPaxos(dp);
-        }
-      }
+      this->manage_consensus();
 
       this->cleanup(); //clean up old allocated memory for consensus
       if (this->aborting){
