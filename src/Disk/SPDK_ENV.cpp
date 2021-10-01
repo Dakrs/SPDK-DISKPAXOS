@@ -13,6 +13,7 @@ namespace SPDK_ENV {
   uint32_t NEXT_CORE = 0;
   uint32_t NEXT_CORE_REPLICA = 0;
   uint32_t SCHEDULE_EVENTS[MAX_NUMBER_CORES];
+  int STRIP_SIZE = 4;
 
   std::set<std::string> crtl_addresses;
   std::set<std::string> addresses; //set a string identifying every disk

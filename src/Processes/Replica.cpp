@@ -20,7 +20,7 @@ namespace ReplicaPaxos {
   }
 
   Decision::Decision(int slot,int l_core): slot(slot){
-    this->res = DiskPaxos::read_decision(slot,l_core);
+    this->res = DiskPaxos::read_decision(slot);
   }
 
   bool Decision::isReady(){
@@ -125,7 +125,7 @@ namespace ReplicaPaxos {
     int return_slot = this->slot;
     //DiskPaxos::propose(this->pid,this->slot,command,this->pid); //voltar a propor para um novo slot
     if (this->l_core >= 0)
-      DiskPaxos::propose(this->pid,this->slot,command,this->l_core); //voltar a propor para um novo slot
+      DiskPaxos::propose(this->pid,this->slot,command); //voltar a propor para um novo slot
     else
       DiskPaxos::propose(this->pid,this->slot,command); //voltar a propor para um novo slot
 

@@ -86,10 +86,28 @@ namespace MultiReplicaPaxos {
     //int n_lines = 0;
     auto t_start = std::chrono::high_resolution_clock::now();
     try{
+
+      /**
       while (std::getline(infile,line)) {
         int i = this->propose(line);
         if (i >= this->received_decisions)
           this->decisionsTosolve.insert(i);
+        this->handle_possible_decisions();
+        std::this_thread::sleep_for(std::chrono::microseconds(this->opts.proposal_interval));
+      }*/
+      std::vector<std::string> commands;
+      int n_lines = 0;
+      while (std::getline(infile,line)) {
+        /* code */
+        commands.push_back(line);
+        n_lines++;
+
+        if (n_lines >= 4){
+          this->propose(commands);
+          n_lines = 0;
+          commands.clear();
+        }
+
         this->handle_possible_decisions();
         std::this_thread::sleep_for(std::chrono::microseconds(this->opts.proposal_interval));
       }
@@ -199,13 +217,23 @@ namespace MultiReplicaPaxos {
     int return_slot = this->slot;
     //DiskPaxos::propose(this->pid,this->slot,command,this->pid); //voltar a propor para um novo slot
     if (this->l_core >= 0)
-      DiskPaxos::propose(this->pid,this->slot,command,this->l_core); //voltar a propor para um novo slot
+      DiskPaxos::propose(this->pid,this->slot,command); //voltar a propor para um novo slot
     else
       DiskPaxos::propose(this->pid,this->slot,command); //voltar a propor para um novo slot
 
     this->proposals.insert(std::pair<int,std::string>(this->slot,command));
     this->slot++;
     return return_slot;
+  }
+
+  void MultiReplicaPaxos::propose(std::vector<std::string>& commands){
+    int starting_slot = this->slot;
+    for(auto c : commands){
+      this->proposals.insert(std::pair<int,std::string>(this->slot,c));
+      this->decisionsTosolve.insert(this->slot);
+      this->slot++;
+    }
+    DiskPaxos::propose_strip(this->pid,starting_slot,commands);
   }
 
   void MultiReplicaPaxos::output(){

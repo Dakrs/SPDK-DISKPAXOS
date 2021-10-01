@@ -34,6 +34,7 @@ namespace LeaderPaxos {
     this->pid = pid;
     this->slots = std::vector<DiskPaxos::DiskPaxos *>(NUM_LANES,NULL);
     this->queues = std::vector<std::queue<Proposal>>(NUM_LANES, std::queue<Proposal>());
+    this->queues_sizes = std::vector<int>(NUM_LANES);
     this->searching = false;
     this->aborting = false;
     this->last_proposal_found = std::chrono::high_resolution_clock::now();
@@ -45,6 +46,7 @@ namespace LeaderPaxos {
     this->pid = pid;
     this->slots = std::vector<DiskPaxos::DiskPaxos *>(this->opts.number_of_lanes,NULL);
     this->queues = std::vector<std::queue<Proposal>>(this->opts.number_of_lanes, std::queue<Proposal>());
+    this->queues_sizes = std::vector<int>(this->opts.number_of_lanes);
     this->searching = false;
     this->aborting = false;
     this->last_proposal_found = std::chrono::high_resolution_clock::now();
@@ -74,7 +76,7 @@ namespace LeaderPaxos {
   void LeaderPaxos::search(){
     if (!this->searching){
       this->searching = true;
-      this->props = DiskPaxos::read_proposals(this->latest_slot,this->opts.number_of_lanes);
+      this->props = DiskPaxos::read_proposals_strip(this->latest_slot,4);
     }
 
     const auto f_current_state = this->props.wait_until(std::chrono::system_clock::time_point::min());
@@ -124,6 +126,7 @@ namespace LeaderPaxos {
 
         int target_slot = slot % this->opts.number_of_lanes;
         this->queues[target_slot].push(Proposal(blk.slot,blk.input));
+        this->queues_sizes[target_slot]++;
       }
     }
     this->searching = false;
@@ -146,25 +149,40 @@ namespace LeaderPaxos {
     }
   }
 
+  void LeaderPaxos::start_consensus(int i){
+    Proposal p = this->queues[i].front();
+    this->queues[i].pop();
+    this->queues_sizes[i]--;
+
+    //std::cout << "Launching slot: " << p.slot << '\n';
+    DiskPaxos::DiskPaxos * dp = new DiskPaxos::DiskPaxos(p.command,p.slot,this->pid);
+    this->slots[i] = dp;
+    //DiskPaxos::launch_DiskPaxos(dp,this->pid); // spawns a new instance of the consensus protocol
+    DiskPaxos::launch_DiskPaxos(dp);
+  }
+
   void LeaderPaxos::manage_consensus(){
     for (int i = 0; i < this->opts.number_of_lanes; i++) {
       DiskPaxos::DiskPaxos * dp = this->slots[i];
       //se estiver livre ou se já tiver terminado
-      if ((dp == NULL && this->queues[i].size() > 0) || (dp != NULL && dp->finished > 0 && this->queues[i].size() > 0)) {
-        Proposal p = this->queues[i].front();
-        this->queues[i].pop();
-        if (dp != NULL){
-          //check if a transaction was aborted
-          if (dp->status == 2){
-            this->aborting = true;
-            break;
-          }
-          this->waiting_for_cleanup.insert(std::pair<int,DiskPaxos::DiskPaxos *>(dp->slot,dp));
+      if (dp == NULL && this->queues_sizes[i] > 0) {
+        this->start_consensus(i);
+        continue;
+      }
+
+      if (dp != NULL && dp->finished > 0){
+        if (dp->status == 2){
+          this->aborting = true;
+          break;
         }
-        dp = new DiskPaxos::DiskPaxos(p.command,p.slot,this->pid);
-        this->slots[i] = dp;
-        //DiskPaxos::launch_DiskPaxos(dp,this->pid); // spawns a new instance of the consensus protocol
-        DiskPaxos::launch_DiskPaxos(dp);
+        this->waiting_for_cleanup.insert(std::pair<int,DiskPaxos::DiskPaxos *>(dp->slot,dp));
+
+        if (this->queues_sizes[i] > 0){
+          this->start_consensus(i);
+        }
+        else {
+          this->slots[i] = NULL;
+        }
       }
     }
   }

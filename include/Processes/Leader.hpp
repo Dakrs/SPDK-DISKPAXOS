@@ -38,6 +38,7 @@ namespace LeaderPaxos {
     std::vector<DiskPaxos::DiskPaxos *> slots; // currently running consensus
     std::map<int,DiskPaxos::DiskPaxos *> waiting_for_cleanup; // consensus finished waiting to be cleaned up
     std::vector<std::queue<Proposal>> queues; // queue for each lane
+    std::vector<int> queues_sizes;
     bool searching; //boolean flag to keep track of searching for blocks
     std::future<std::unique_ptr<std::map<int,DiskBlock>> > props; //future with a map of proposals
     bool aborting;
@@ -55,6 +56,7 @@ namespace LeaderPaxos {
       void search();
       void receive();
       void manage_consensus();
+      void start_consensus(int i);
   };
 }
 

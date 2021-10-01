@@ -52,6 +52,7 @@ namespace MultiReplicaPaxos {
       void handle_possible_decisions();
       void receive();
       int propose(std::string command);
+      void propose(std::vector<std::string>& commands);
       void cleanup();
   };
 }

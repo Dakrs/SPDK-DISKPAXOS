@@ -30,6 +30,7 @@ namespace SPDK_ENV {
   extern uint32_t NEXT_CORE;
   extern uint32_t NEXT_CORE_REPLICA;
 	extern uint32_t SCHEDULE_EVENTS[MAX_NUMBER_CORES];
+	extern int STRIP_SIZE;
 
 	struct SPDK_ENV_OPTS {
 		uint32_t qpair_io_queue_size;
