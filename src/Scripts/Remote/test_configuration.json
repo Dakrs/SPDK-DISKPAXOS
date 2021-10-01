@@ -3,6 +3,6 @@
   "qpair_queue_size": "8192",
   "qpair_queue_request": "8192",
   "proposal_interval": "50",
-  "read_amount_replica": "4",
-  "number_of_slots_to_read": "4"
+  "read_amount_replica": "8",
+  "number_of_slots_to_read": "8"
 }
