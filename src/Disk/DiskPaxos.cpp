@@ -1028,6 +1028,7 @@ void DiskPaxos::propose_strip(int pid,int slot,std::vector<std::string>& command
 	uint32_t core = SPDK_ENV::allocate_replica_core();
 
 	MultiProposal * p = new MultiProposal(pid,slot,commands,core);
+
 	struct spdk_event * e = spdk_event_allocate(core,internal_proposal_stripe,p,NULL);
 	spdk_event_call(e);
 }

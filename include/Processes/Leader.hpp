@@ -22,8 +22,9 @@ namespace LeaderPaxos {
   struct LeaderPaxosOpts {
     int number_of_lanes;
     int number_of_proposals_read;
+    bool strip;
 
-    LeaderPaxosOpts(int lanes,int read_amount);
+    LeaderPaxosOpts(int lanes,int read_amount,bool flag);
     LeaderPaxosOpts(int lanes);
     LeaderPaxosOpts();
     ~LeaderPaxosOpts();

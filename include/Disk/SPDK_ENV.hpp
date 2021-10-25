@@ -39,9 +39,12 @@ namespace SPDK_ENV {
 		int NUM_CONCENSOS_LANES;
 		std::string name;
 		std::string reactor_mask;
+		int strip_size;
 
+		SPDK_ENV_OPTS();
 		SPDK_ENV_OPTS(int n_p,int n_k,std::string CPU_MASK);
 		SPDK_ENV_OPTS(int n_p,int n_k,std::string CPU_MASK,std::string Name,uint32_t queue_size,uint32_t queue_requests);
+		SPDK_ENV_OPTS(int n_p,int n_k,std::string CPU_MASK,std::string Name,uint32_t queue_size,uint32_t queue_requests,int strip_size);
 		void print();
 		~SPDK_ENV_OPTS();
 	};

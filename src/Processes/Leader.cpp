@@ -5,19 +5,22 @@
 
 namespace LeaderPaxos {
 
-  LeaderPaxosOpts::LeaderPaxosOpts(int lanes,int read_amount){
+  LeaderPaxosOpts::LeaderPaxosOpts(int lanes,int read_amount,bool flag){
     this->number_of_lanes = lanes;
     this->number_of_proposals_read = read_amount;
+    this->strip = flag;
   }
 
   LeaderPaxosOpts::LeaderPaxosOpts(int lanes){
     this->number_of_lanes = lanes;
     this->number_of_proposals_read = lanes;
+    this->strip = false;
   }
 
   LeaderPaxosOpts::LeaderPaxosOpts(){
     this->number_of_lanes = 32;
     this->number_of_proposals_read = 32;
+    this->strip = false;
   }
 
   LeaderPaxosOpts::~LeaderPaxosOpts(){}
@@ -76,7 +79,11 @@ namespace LeaderPaxos {
   void LeaderPaxos::search(){
     if (!this->searching){
       this->searching = true;
-      this->props = DiskPaxos::read_proposals_strip(this->latest_slot,4);
+
+      if (this->opts.strip)
+        this->props = DiskPaxos::read_proposals_strip(this->latest_slot,this->opts.number_of_proposals_read);
+      else
+        this->props = DiskPaxos::read_proposals(this->latest_slot,this->opts.number_of_proposals_read);
     }
 
     const auto f_current_state = this->props.wait_until(std::chrono::system_clock::time_point::min());

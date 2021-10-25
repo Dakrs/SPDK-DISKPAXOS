@@ -13,7 +13,7 @@ namespace SPDK_ENV {
   uint32_t NEXT_CORE = 0;
   uint32_t NEXT_CORE_REPLICA = 0;
   uint32_t SCHEDULE_EVENTS[MAX_NUMBER_CORES];
-  int STRIP_SIZE = 4;
+  int STRIP_SIZE = 0;
 
   std::set<std::string> crtl_addresses;
   std::set<std::string> addresses; //set a string identifying every disk
@@ -23,6 +23,15 @@ namespace SPDK_ENV {
   std::atomic<bool> ready(false); //flag to make sure spdk libray has started
   std::thread internal_spdk_event_launcher; //internal thread to coordinate spdk.
 
+  SPDK_ENV_OPTS::SPDK_ENV_OPTS(){
+    this->qpair_io_queue_size = 2048;
+    this->qpair_io_queue_requests = 2048;
+    this->NUM_PROCESSES = 3;
+    this->NUM_CONCENSOS_LANES = 32;
+    this->reactor_mask = "0x1";
+    this->name = "EventTest";
+    this->strip_size = 0;
+  }
 
   SPDK_ENV_OPTS::SPDK_ENV_OPTS(int n_p,int n_k,std::string CPU_MASK){
     this->qpair_io_queue_size = 2048;
@@ -31,6 +40,7 @@ namespace SPDK_ENV {
     this->NUM_CONCENSOS_LANES = n_k;
     this->reactor_mask = CPU_MASK;
     this->name = "EventTest";
+    this->strip_size = 0;
   }
 
   SPDK_ENV_OPTS::SPDK_ENV_OPTS(int n_p,int n_k,std::string CPU_MASK,std::string name,uint32_t queue_size,uint32_t queue_requests){
@@ -40,6 +50,17 @@ namespace SPDK_ENV {
     this->NUM_CONCENSOS_LANES = n_k;
     this->reactor_mask = CPU_MASK;
     this->name = name;
+    this->strip_size = 0;
+  }
+
+  SPDK_ENV_OPTS::SPDK_ENV_OPTS(int n_p,int n_k,std::string CPU_MASK,std::string name,uint32_t queue_size,uint32_t queue_requests,int strip_size){
+    this->qpair_io_queue_size = queue_size;
+    this->qpair_io_queue_requests = queue_requests;
+    this->NUM_PROCESSES = n_p;
+    this->NUM_CONCENSOS_LANES = n_k;
+    this->reactor_mask = CPU_MASK;
+    this->name = name;
+    this->strip_size = strip_size;
   }
 
   void SPDK_ENV_OPTS::print(){
@@ -50,6 +71,7 @@ namespace SPDK_ENV {
     std::cout << "NUM_CONCENSOS_LANES: " << this->NUM_CONCENSOS_LANES << '\n';
     std::cout << "reactor_mask: " << this->reactor_mask << '\n';
     std::cout << "name: " << this->name << '\n';
+    std::cout << "STRIP_SIZE: " << this->strip_size << '\n';
   }
 
   SPDK_ENV_OPTS::~SPDK_ENV_OPTS(){}
@@ -123,7 +145,11 @@ namespace SPDK_ENV {
   	uint32_t n_cores = spdk_env_get_core_count();
   	uint32_t k = spdk_env_get_first_core();
   	for (uint32_t i = 0; i < n_cores; i++) {
-  		my_ns->qpairs.insert(std::pair<uint32_t,struct spdk_nvme_qpair	*>(k,spdk_nvme_ctrlr_alloc_io_qpair(ctrlr, &qpair_opts, sizeof(struct spdk_nvme_io_qpair_opts))));
+      struct spdk_nvme_qpair	* queue = spdk_nvme_ctrlr_alloc_io_qpair(ctrlr, &qpair_opts, sizeof(struct spdk_nvme_io_qpair_opts));
+      if (queue == NULL)
+        std::cout << "Error on queue allocation" << '\n';
+
+  		my_ns->qpairs.insert(std::pair<uint32_t,struct spdk_nvme_qpair	*>(k,queue));
   		k = spdk_env_get_next_core(k);
   	}
 
@@ -380,6 +406,10 @@ namespace SPDK_ENV {
   int spdk_start(SPDK_ENV_OPTS & env_opts,std::vector<std::string>& trids){
     NUM_PROCESSES = env_opts.NUM_PROCESSES;
   	NUM_CONCENSOS_LANES = env_opts.NUM_CONCENSOS_LANES;
+
+    if (env_opts.strip_size > 0){
+      STRIP_SIZE = env_opts.strip_size;
+    }
 
     std::vector<std::string> * v_aux = new std::vector<std::string> ();
     for(auto trid : trids)
