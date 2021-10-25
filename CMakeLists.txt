@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.10)
 
 project(DiskPaxos)
 
+message(STATUS "SPDK DIR:${SPDK_P}")
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
@@ -31,7 +33,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} \
         -fpermissive \
     ")
 
-set(SPDK_DIR $ENV{HOME}/spdk)
+set(SPDK_DIR "${SPDK_P}")
 set(ENV{PKG_CONFIG_PATH} "${SPDK_DIR}/build/lib/pkgconfig")
 
 find_package(PkgConfig REQUIRED)

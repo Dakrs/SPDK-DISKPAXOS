@@ -28,7 +28,7 @@
   "processes": [
     {
       "id": "0",
-      "cpumask": "0x8s0",
+      "cpumask": "0x80",
       "name": "diogosobral98@instance-template-1.us-central1-a.diskpaxos",
       "config": "test_configuration.json"
     },
