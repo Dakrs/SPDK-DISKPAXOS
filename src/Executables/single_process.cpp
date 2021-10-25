@@ -24,7 +24,7 @@ using json = nlohmann::json;
 void helpFunction();
 bool verify_args(int N_PROCESSES, int N_LANES, int PID, std::string cpumask);
 void compute_trids(std::string str, std::vector<std::string> * trids);
-void setConfig(std::string config_file,std::string * app_name,int * qpair_queue_size,int * qpair_queue_request,int * proposal_interval,int * read_amount_replica,int * number_of_slots_to_read);
+void setConfig(std::string config_file,std::string * app_name,int * qpair_queue_size,int * qpair_queue_request,int * proposal_interval,int * read_amount_replica,int * number_of_slots_to_read,int * strip_size);
 
 
 void helpFunction()
@@ -80,12 +80,7 @@ void compute_trids(std::string str, std::vector<std::string> * trids){
   }
 }
 
-void setConfig(std::string config_file_str,std::string * app_name,int * qpair_queue_size,int * qpair_queue_request,int * proposal_interval,int * read_amount_replica,int * number_of_slots_to_read){
-  /**
-  std::ifstream config_file(config_file_str, std::ifstream::binary);
-  config_file >> config;
-
-  cout << config;*/
+void setConfig(std::string config_file_str,std::string * app_name,int * qpair_queue_size,int * qpair_queue_request,int * proposal_interval,int * read_amount_replica,int * number_of_slots_to_read,int * strip_size){
 
   std::ifstream config_file(config_file_str);
   json config;
@@ -114,6 +109,10 @@ void setConfig(std::string config_file_str,std::string * app_name,int * qpair_qu
   if (config["number_of_slots_to_read"] != NULL){
     *number_of_slots_to_read = stoi(config["number_of_slots_to_read"].get<std::string>());
   }
+
+  if (config["strip_size"] != NULL){
+    *strip_size = stoi(config["strip_size"].get<std::string>());
+  }
 }
 
 int main(int argc, char *argv[]) {
@@ -129,6 +128,7 @@ int main(int argc, char *argv[]) {
 
   int qpair_queue_size = 2048, qpair_queue_request = 2048, proposal_interval = 500;
   int read_amount_replica,number_of_slots_to_read;
+  int strip_size = 0;
 
   const struct option longopts[] =
   {
@@ -205,13 +205,23 @@ int main(int argc, char *argv[]) {
   }
 
   if (config_file.size() > 0 )
-    setConfig(config_file,&app_name,&qpair_queue_size,&qpair_queue_request,&proposal_interval,&read_amount_replica,&number_of_slots_to_read);
+    setConfig(config_file,&app_name,&qpair_queue_size,&qpair_queue_request,&proposal_interval,&read_amount_replica,&number_of_slots_to_read,&strip_size);
 
   //std::vector<std::string> example {"trtype:TCP adrfam:IPv4 traddr:127.0.0.1 trsvcid:4420 subnqn:nqn.2016-06.io.spdk:cnode1"};
-  SPDK_ENV::SPDK_ENV_OPTS env_opts(N_PROCESSES,N_LANES,cpumask,app_name,qpair_queue_size,qpair_queue_request);
-  MultiReplicaPaxos::MultiReplicaPaxosOpts replica_opts(read_amount_replica,proposal_interval, config_file.size() > 0);
-  LeaderPaxos::LeaderPaxosOpts leader_opts(N_LANES,number_of_slots_to_read);
+  SPDK_ENV::SPDK_ENV_OPTS env_opts;
+  MultiReplicaPaxos::MultiReplicaPaxosOpts replica_opts;
+  LeaderPaxos::LeaderPaxosOpts leader_opts;
 
+  if (strip_size > 0){
+    env_opts = SPDK_ENV::SPDK_ENV_OPTS(N_PROCESSES,N_LANES,cpumask,app_name,qpair_queue_size,qpair_queue_request,strip_size);
+    leader_opts = LeaderPaxos::LeaderPaxosOpts(N_LANES,number_of_slots_to_read,true);
+    replica_opts = MultiReplicaPaxos::MultiReplicaPaxosOpts(read_amount_replica,proposal_interval, config_file.size() > 0,strip_size);
+  }
+  else{
+    env_opts = SPDK_ENV::SPDK_ENV_OPTS(N_PROCESSES,N_LANES,cpumask,app_name,qpair_queue_size,qpair_queue_request);
+    leader_opts = LeaderPaxos::LeaderPaxosOpts(N_LANES,number_of_slots_to_read,false);
+    replica_opts = MultiReplicaPaxos::MultiReplicaPaxosOpts(read_amount_replica,proposal_interval, config_file.size() > 0, 0);
+  }
 
   env_opts.print();
   replica_opts.print();

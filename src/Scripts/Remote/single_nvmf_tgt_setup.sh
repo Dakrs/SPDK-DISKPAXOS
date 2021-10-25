@@ -62,9 +62,11 @@ then
   cpu_mask=0x1
 fi
 
+mkdir /home/diogosobral98/thesis/Thesis/build/disk_log
+
 cd $SPDK_DIR
 
-sudo build/bin/nvmf_tgt -m $cpu_mask &
+sudo build/bin/nvmf_tgt -m $cpu_mask &> /home/diogosobral98/thesis/Thesis/build/disk_log/disk.log &
 
 sleep 3
 

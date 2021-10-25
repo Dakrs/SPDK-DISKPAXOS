@@ -1,5 +1,28 @@
 #!/bin/sh
 
+helpFunction()
+{
+   echo ""
+   echo "Usage: ./installDeps.sh -p ~/spdk"
+   echo "\t-p Path to spdk directory"
+   exit 1 # Exit script after printing help
+}
+
+while getopts "p:h" opt
+do
+   case "$opt" in
+      p ) SPDK_DIR="$OPTARG" ;;
+      h ) helpFunction ;;
+      ? ) helpFunction ;; # Print helpFunction in case parameter is non-existent
+   esac
+done
+
+if [ -z "$SPDK_DIR" ]
+then
+   echo "No Path to spdk given";
+   helpFunction;
+fi
+
 if command -v git >/dev/null 2>&1 ; then
     echo "git found"
 else
@@ -26,11 +49,11 @@ fi
 
 sudo apt-get update
 
-cd /home/diogosobral98
+cd $SPDK_DIR
 
-sudo -u diogosobral98 git clone https://github.com/spdk/spdk
+git clone https://github.com/spdk/spdk
 cd spdk
-sudo -u diogosobral98 git submodule update --init
+git submodule update --init
 
 sudo scripts/pkgdep.sh
 

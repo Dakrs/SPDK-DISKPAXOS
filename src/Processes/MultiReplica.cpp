@@ -14,28 +14,45 @@
 #include <memory>
 
 namespace MultiReplicaPaxos {
-  MultiReplicaPaxosOpts::MultiReplicaPaxosOpts(int dec,int interval,bool bench){
+
+  Proposal::Proposal(int slot,std::string command){
+    this->slot = slot;
+    this->command = command;
+    this->start = std::chrono::high_resolution_clock::now();
+  }
+
+  void Proposal::finish(){
+    this->end = std::chrono::high_resolution_clock::now();
+  }
+
+  Proposal::~Proposal(){};
+
+  MultiReplicaPaxosOpts::MultiReplicaPaxosOpts(int dec,int interval,bool bench,int propose_strip){
     this->decisions_read_amount = dec;
     this->proposal_interval = interval;
     this->benchmarking = bench;
+    this->propose_strip = propose_strip;
   }
 
   MultiReplicaPaxosOpts::MultiReplicaPaxosOpts(int dec,int interval){
     this->decisions_read_amount = dec;
     this->proposal_interval = interval;
     this->benchmarking = false;
+    this->propose_strip = 0;
   }
 
   MultiReplicaPaxosOpts::MultiReplicaPaxosOpts(int dec){
     this->decisions_read_amount = dec;
     this->proposal_interval = 500;
     this->benchmarking = false;
+    this->propose_strip = 0;
   }
 
   MultiReplicaPaxosOpts::MultiReplicaPaxosOpts(){
     this->decisions_read_amount = 32;
     this->proposal_interval = 500;
     this->benchmarking = false;
+    this->propose_strip = 0;
   }
 
   MultiReplicaPaxosOpts::~MultiReplicaPaxosOpts(){}
@@ -86,10 +103,35 @@ namespace MultiReplicaPaxos {
     //int n_lines = 0;
     auto t_start = std::chrono::high_resolution_clock::now();
     try{
+
+      /**
       while (std::getline(infile,line)) {
         int i = this->propose(line);
         if (i >= this->received_decisions)
           this->decisionsTosolve.insert(i);
+        this->handle_possible_decisions();
+        std::this_thread::sleep_for(std::chrono::microseconds(this->opts.proposal_interval));
+      }*/
+      std::vector<std::string> commands;
+      int n_lines = 0;
+      while (std::getline(infile,line)) {
+        /* code */
+        if (this->opts.propose_strip > 0){
+          commands.push_back(line);
+          n_lines++;
+
+          if (n_lines >= this->opts.propose_strip){
+            this->propose(commands);
+            n_lines = 0;
+            commands.clear();
+          }
+        }
+        else{
+          int i = this->propose(line);
+          if (i >= this->received_decisions)
+            this->decisionsTosolve.insert(i);
+        }
+
         this->handle_possible_decisions();
         std::this_thread::sleep_for(std::chrono::microseconds(this->opts.proposal_interval));
       }
@@ -106,6 +148,16 @@ namespace MultiReplicaPaxos {
       if (this->opts.benchmarking){
         double opt_per_sec = this->decisions.size() / (elapsed_time_ms / 1000);
         std::cout << "Throughput: " << opt_per_sec << " opts/sec" << std::endl;
+
+        int start_point = this->decisions.size() * 0.1;
+        int ending_point = this->decisions.size() * 0.9;
+
+        auto hot_spot_start = this->proposals.find(start_point)->second.start;
+        auto hot_spot_end = this->proposals.find(ending_point)->second.end;
+        elapsed_time_ms = std::chrono::duration<double, std::milli>(hot_spot_end-hot_spot_start).count();
+
+        opt_per_sec = (this->decisions.size() * 0.8) / (elapsed_time_ms / 1000);
+        std::cout << "Throughput on hotspot: " << opt_per_sec << " opts/sec" << std::endl;
       }
 
       std::cout << "Logging results " << std::endl;
@@ -132,7 +184,8 @@ namespace MultiReplicaPaxos {
       set_it = this->decisionsTosolve.find(slot);
       if (set_it != this->decisionsTosolve.end()){
         this->decisionsTosolve.erase(set_it);
-        this->proposals.erase(this->proposals.find(slot));
+        //this->proposals.erase(this->proposals.find(slot));
+        this->proposals.find(slot)->second.finish();
       }
     }
 
@@ -199,13 +252,23 @@ namespace MultiReplicaPaxos {
     int return_slot = this->slot;
     //DiskPaxos::propose(this->pid,this->slot,command,this->pid); //voltar a propor para um novo slot
     if (this->l_core >= 0)
-      DiskPaxos::propose(this->pid,this->slot,command,this->l_core); //voltar a propor para um novo slot
+      DiskPaxos::propose(this->pid,this->slot,command); //voltar a propor para um novo slot
     else
       DiskPaxos::propose(this->pid,this->slot,command); //voltar a propor para um novo slot
 
-    this->proposals.insert(std::pair<int,std::string>(this->slot,command));
+    this->proposals.insert(std::pair<int,Proposal>(this->slot,Proposal(this->slot,command)));
     this->slot++;
     return return_slot;
+  }
+
+  void MultiReplicaPaxos::propose(std::vector<std::string>& commands){
+    int starting_slot = this->slot;
+    for(auto c : commands){
+      this->proposals.insert(std::pair<int,Proposal>(this->slot,Proposal(this->slot,c)));
+      this->decisionsTosolve.insert(this->slot);
+      this->slot++;
+    }
+    DiskPaxos::propose_strip(this->pid,starting_slot,commands);
   }
 
   void MultiReplicaPaxos::output(){

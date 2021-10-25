@@ -43,11 +43,13 @@ struct DiskOperation {
 	int status;
 	uint32_t target_core;
 	DiskPaxos::DiskPaxos * dp;
+	uint64_t start;
 
 	DiskOperation(string d_id,int t,DiskPaxos::DiskPaxos * pointer,uint32_t target_core): disk_id(d_id), tick(t){
 		status = 0;
 		dp = pointer;
 		this->target_core = target_core;
+		this->start = spdk_get_ticks();
 	};
 
 	/**
@@ -58,12 +60,19 @@ struct DiskOperation {
 		status = 0;
 		dp = pointer;
 		this->target_core = target_core;
+		this->start = spdk_get_ticks();
 	};
 	DiskOperation(string d_id,uint32_t target_core): disk_id(d_id){
 		status = 0;
 		dp = NULL;
 		this->target_core = target_core;
+		this->start = spdk_get_ticks();
 	};
+
+	void output_time(){
+		double elapsed_time = (double) (spdk_get_ticks() - this->start) / (double) spdk_get_ticks_hz();
+		std::cout << "Opt took: " << elapsed_time * 1000.0 << " ms " << '\n';
+	}
 	~DiskOperation(){};
 };
 
@@ -76,7 +85,7 @@ struct Proposal {
 	Proposal(int pid,int slot, string command, uint32_t target_core): pid(pid), slot(slot), command(command), target_core(target_core) {};
 	~Proposal(){};
 };
-/**
+
 struct MultiProposal {
 	int pid;
 	int starting_slot;
@@ -87,7 +96,7 @@ struct MultiProposal {
 		commands = s_command;
 	};
 	~MultiProposal(){};
-};*/
+};
 
 struct MultipleDecisionRead {
 	int starting_slot;
@@ -505,6 +514,8 @@ static void read_complete(void *arg,const struct spdk_nvme_cpl *completion){
 	DiskPaxos::DiskPaxos * dp = dO->dp;
 
 	dp->n_events--;
+
+	//dO->output_time();
 	if (dO->tick == dp->tick){
 		int size_elem = dO->size_elem;
 		for (int i = 0; i < SPDK_ENV::NUM_PROCESSES; i++) {
@@ -879,7 +890,7 @@ static void verify_event_test(void * arg1, void * arg2){
 		delete dO;
 	}
 }
-
+*
 static void internal_multi_proposal(void * arg1, void * arg2){
 	MultiProposal * props = (MultiProposal *) arg1;
 
@@ -948,11 +959,77 @@ static void internal_multi_proposal(void * arg1, void * arg2){
 }
 */
 
+static void internal_proposal_stripe(void * arg1, void * arg2){
+	MultiProposal * props = (MultiProposal *) arg1;
+
+	DiskBlock db;
+
+	vector<string> dbs_serialized;
+
+	int starting_slot = props->starting_slot;
+	for(auto str : props->commands){
+		db.slot = starting_slot;
+		starting_slot++;
+		db.input = str;
+		dbs_serialized.push_back(db.serialize());
+	}
+
+	map<string,unique_ptr<SPDK_ENV::NVME_NAMESPACE_MULTITHREAD>>::iterator it;
+	map<uint32_t,struct spdk_nvme_qpair	*>::iterator it_qpair;
+
+	int LBA_INDEX = SPDK_ENV::NUM_CONCENSOS_LANES * SPDK_ENV::NUM_PROCESSES + PROPOSAL_OFFSET + (props->starting_slot / SPDK_ENV::STRIP_SIZE) * SPDK_ENV::STRIP_SIZE * SPDK_ENV::NUM_PROCESSES + props->pid * SPDK_ENV::STRIP_SIZE;
+
+	for(auto disk_id: SPDK_ENV::addresses){
+		it = SPDK_ENV::namespaces.find(disk_id);
+
+		if (it != SPDK_ENV::namespaces.end()){
+			size_t BUFFER_SIZE = (it->second->info.lbaf + it->second->info.metadata_size);
+			DiskPaxos::byte * buff = (DiskPaxos::byte *) spdk_zmalloc(BUFFER_SIZE * dbs_serialized.size(), 0x1000, NULL, SPDK_ENV_SOCKET_ID_ANY, SPDK_MALLOC_DMA);
+			DiskOperation * dO = new DiskOperation(disk_id,props->target_core);
+
+			int index = 0;
+			for(auto str : dbs_serialized){
+				string_to_bytes(str,buff + index);
+				index += BUFFER_SIZE;
+			}
+			dO->buffer = buff;
+
+			it_qpair = it->second->qpairs.find(props->target_core);
+
+			if (buff == NULL) //apagar depois
+				fprintf(stderr, "NULL Buffer on STRIPE_Proposal\n");
+
+			int rc = spdk_nvme_ns_cmd_write(it->second->ns, it_qpair->second , dO->buffer,
+								LBA_INDEX, /* LBA start */
+								SPDK_ENV::STRIP_SIZE, /* number of LBAs */
+								simple_write_complete, dO, 0); //submit a write operation to NVME
+
+			if (rc != 0) {
+					SPDK_ENV::error_on_cmd_submit(rc,"Proposal Stripe","write");
+					exit(1);
+			}
+
+			SPDK_ENV::SCHEDULE_EVENTS[dO->target_core]++;
+			struct spdk_event * e = spdk_event_allocate(dO->target_core,verify_event,dO,NULL);
+			spdk_event_call(e);
+		}
+	}
+}
+
 void DiskPaxos::propose(int pid, int slot,string command){
 	uint32_t core = SPDK_ENV::allocate_replica_core();
 	Proposal * p = new Proposal(pid,slot,command,core);
 
 	struct spdk_event * e = spdk_event_allocate(core,internal_proposal,p,NULL);
+	spdk_event_call(e);
+}
+
+void DiskPaxos::propose_strip(int pid,int slot,std::vector<std::string>& commands){
+	uint32_t core = SPDK_ENV::allocate_replica_core();
+
+	MultiProposal * p = new MultiProposal(pid,slot,commands,core);
+
+	struct spdk_event * e = spdk_event_allocate(core,internal_proposal_stripe,p,NULL);
 	spdk_event_call(e);
 }
 
@@ -965,13 +1042,6 @@ void DiskPaxos::propose_sgl(int pid, int starting_slot,vector<string> commands){
 	spdk_event_call(e);
 }
 */
-void DiskPaxos::propose(int pid, int slot,string command,uint32_t target_core){
-	uint32_t core = target_core;
-	Proposal * p = new Proposal(pid,slot,command,core);
-
-	struct spdk_event * e = spdk_event_allocate(core,internal_proposal,p,NULL);
-	spdk_event_call(e);
-}
 
 static void verify_event_leader(void * arg1, void * arg2){
 	LeaderReadOpt * dO = (LeaderReadOpt *) arg1;
@@ -1151,18 +1221,117 @@ std::future<unique_ptr<map<int,DiskBlock>> > DiskPaxos::read_proposals(int k,int
 	return response;
 }
 
-std::future<unique_ptr<map<int,DiskBlock>> > DiskPaxos::read_proposals(int k,int number_of_slots,int pid){
+static void leader_read_completion_strip(void *arg,const struct spdk_nvme_cpl *completion){
+	LeaderReadOpt * ld_opt = (LeaderReadOpt *) arg;
+	LeaderRead * ld = ld_opt->ld;
+
+	if (spdk_nvme_cpl_is_error(completion)) {
+		fprintf(stderr, "I/O error status: %s leader_read_completion on slot %d\n", spdk_nvme_cpl_get_status_string(&completion->status),ld->starting_slot);
+		fprintf(stderr, "Read I/O failed, aborting run\n");
+		SPDK_ENV::print_qpair_failure_reason(ld_opt->disk_id,ld_opt->target_core);
+		exit(-1);
+	}
+	SPDK_ENV::SCHEDULE_EVENTS[ld_opt->target_core]--;
+
+	if (ld->status){ //already ended the read from a majority of disks
+		ld->n_events--;
+		spdk_free(ld_opt->buffer);
+		ld_opt->status = 1;
+		return;
+	}
+
+	map<int,DiskBlock>::iterator it;
+
+	for(int i = 0; i < ld->number_of_slots; i++){
+		for (int p = 0; p < SPDK_ENV::NUM_PROCESSES; p++) {
+			for (int j = 0; j < SPDK_ENV::STRIP_SIZE; j++) {
+				it = ld->proposals.find(ld->starting_slot + j + i*SPDK_ENV::STRIP_SIZE);
+
+				if (it == ld->proposals.end()){
+					string db_serialized = bytes_to_string(ld_opt->buffer + (ld_opt->size_elem * i * SPDK_ENV::STRIP_SIZE * SPDK_ENV::NUM_PROCESSES) + (ld_opt->size_elem * SPDK_ENV::NUM_PROCESSES * p) + (ld_opt->size_elem * j)); //buffer to string
+					DiskBlock db;
+					db.deserialize(db_serialized);
+
+					if (db.isValid()){
+						ld->proposals.insert(pair<int,DiskBlock>(ld->starting_slot + j + i*SPDK_ENV::STRIP_SIZE,db));
+					}
+					else{
+						break;
+					}
+				}
+			}
+		}
+	}
+
+	ld->disksSeen.insert(ld_opt->disk_id);
+
+
+	if (ld->disksSeen.size() > (SPDK_ENV::addresses.size() / 2)){
+		ld->status = 1;
+		auto res = new map<int,DiskBlock>(ld->proposals);
+		ld->callback.set_value(unique_ptr<map<int,DiskBlock>>(res));
+
+		struct spdk_event * e = spdk_event_allocate(ld->target_core,LeaderRead_cleanup,ld,NULL);
+		spdk_event_call(e);
+	}
+	ld->n_events--;
+
+	spdk_free(ld_opt->buffer);
+	ld_opt->status = 1;
+}
+
+static void read_list_proposals_strip(void * arg1, void * arg2){
+	LeaderRead * ld = (LeaderRead *) arg1;
+
+	map<string,unique_ptr<SPDK_ENV::NVME_NAMESPACE_MULTITHREAD>>::iterator it;
+	map<uint32_t,struct spdk_nvme_qpair	*>::iterator it_qpair;
+
+	int LBA_INDEX = SPDK_ENV::NUM_CONCENSOS_LANES * SPDK_ENV::NUM_PROCESSES + PROPOSAL_OFFSET + (ld->starting_slot / SPDK_ENV::STRIP_SIZE) * SPDK_ENV::NUM_PROCESSES * SPDK_ENV::STRIP_SIZE;
+
+	for(auto disk_id: SPDK_ENV::addresses){
+		it = SPDK_ENV::namespaces.find(disk_id);
+
+		if (it != SPDK_ENV::namespaces.end()){
+			size_t BUFFER_SIZE = (it->second->info.lbaf + it->second->info.metadata_size);
+			LeaderReadOpt * ld_opt = new LeaderReadOpt(disk_id,BUFFER_SIZE,ld->target_core,ld);
+
+			ld_opt->buffer = (DiskPaxos::byte *) spdk_zmalloc(BUFFER_SIZE * SPDK_ENV::STRIP_SIZE * SPDK_ENV::NUM_PROCESSES * ld->number_of_slots, 0x1000, NULL, SPDK_ENV_SOCKET_ID_ANY, SPDK_MALLOC_DMA);
+			it_qpair = it->second->qpairs.find(ld_opt->target_core);
+
+			if (ld_opt->buffer == NULL) //apagar depois
+				fprintf(stderr, "NULL Buffer on read_list_proposals\n");
+
+			int rc = spdk_nvme_ns_cmd_read(it->second->ns, it_qpair->second , ld_opt->buffer,
+								LBA_INDEX,
+								SPDK_ENV::STRIP_SIZE * SPDK_ENV::NUM_PROCESSES * ld->number_of_slots,
+								leader_read_completion_strip, ld_opt,0);
+
+			if (rc != 0) {
+					SPDK_ENV::error_on_cmd_submit(rc,"read_list_proposals_strip","read");
+					exit(1);
+			}
+
+			SPDK_ENV::SCHEDULE_EVENTS[ld_opt->target_core]++;
+			ld->n_events++;
+			struct spdk_event * e = spdk_event_allocate(ld_opt->target_core,verify_event_leader,ld_opt,NULL);
+			spdk_event_call(e);
+		}
+	}
+}
+
+std::future<std::unique_ptr<std::map<int,DiskBlock>> > DiskPaxos::read_proposals_strip(int k,int number_of_strips){
 	uint32_t core = SPDK_ENV::allocate_leader_core();
-	LeaderRead * ld = new LeaderRead(k,number_of_slots,core,pid);
+	LeaderRead * ld = new LeaderRead(k,number_of_strips,core);
 
 	ld->callback = promise<unique_ptr< map<int,DiskBlock> >>();
 	auto response = ld->callback.get_future();
 
-	struct spdk_event * e = spdk_event_allocate(ld->target_core,read_list_proposals,ld,NULL);
+	struct spdk_event * e = spdk_event_allocate(ld->target_core,read_list_proposals_strip,ld,NULL);
 	spdk_event_call(e);
 
 	return response;
 }
+
 
 static void read_decision_repeat(DecisionReadOpt * dO){
 
@@ -1305,19 +1474,6 @@ static void read_decision_event(void * arg1,void * arg2){
 
 std::future<DiskBlock> DiskPaxos::read_decision(int slot){
 	uint32_t core = SPDK_ENV::allocate_replica_core();
-	DecisionRead * dr = new DecisionRead(slot,core);
-
-	dr->callback = promise<DiskBlock>();
-	auto response = dr->callback.get_future();
-
-	struct spdk_event * e = spdk_event_allocate(dr->target_core,read_decision_event,dr,NULL);
-	spdk_event_call(e);
-
-	return response;
-}
-
-std::future<DiskBlock> DiskPaxos::read_decision(int slot,uint32_t target_core){
-	uint32_t core = target_core;
 	DecisionRead * dr = new DecisionRead(slot,core);
 
 	dr->callback = promise<DiskBlock>();
