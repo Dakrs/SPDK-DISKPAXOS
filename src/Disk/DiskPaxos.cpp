@@ -92,7 +92,7 @@ struct MultiProposal {
 	vector<string> commands;
 	uint32_t target_core;
 
-	MultiProposal(int pid,int slot, vector<string> s_command, uint32_t target_core): pid(pid), starting_slot(slot), target_core(target_core) {
+	MultiProposal(int pid,int slot, vector<string>& s_command, uint32_t target_core): pid(pid), starting_slot(slot), target_core(target_core) {
 		commands = s_command;
 	};
 	~MultiProposal(){};
@@ -1303,7 +1303,7 @@ static void read_list_proposals_strip(void * arg1, void * arg2){
 
 			int rc = spdk_nvme_ns_cmd_read(it->second->ns, it_qpair->second , ld_opt->buffer,
 								LBA_INDEX,
-								SPDK_ENV::STRIP_SIZE * SPDK_ENV::NUM_PROCESSES * ld->number_of_slots,
+								SPDK_ENV::STRIP_SIZE * SPDK_ENV::NUM_PROCESSES,
 								leader_read_completion_strip, ld_opt,0);
 
 			if (rc != 0) {
