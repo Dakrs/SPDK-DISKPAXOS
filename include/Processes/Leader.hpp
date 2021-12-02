@@ -32,6 +32,19 @@ namespace LeaderPaxos {
     void print();
   };
 
+  struct Analyser {
+    int n_concensus;
+    uint64_t * lanes;
+    uint64_t total_ticks;
+
+    Analyser(int lanes);
+    Analyser();
+    ~Analyser();
+    void start(int i);
+    void end(int i);
+    void output();
+  };
+
   class LeaderPaxos {
     int pid; // process id
     int latest_slot; // lastest slot number added to proposals
@@ -45,6 +58,7 @@ namespace LeaderPaxos {
     bool aborting;
     std::chrono::high_resolution_clock::time_point last_proposal_found;
     LeaderPaxosOpts opts;
+    Analyser stats;
 
 
 

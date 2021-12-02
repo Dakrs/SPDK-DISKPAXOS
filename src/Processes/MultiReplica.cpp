@@ -136,8 +136,9 @@ namespace MultiReplicaPaxos {
         std::this_thread::sleep_for(std::chrono::microseconds(this->opts.proposal_interval));
       }
 
-      while(this->decisionsTosolve.size() > 0 && this->slot != this->received_decisions)
+      while(this->decisionsTosolve.size() > 0 && this->slot != this->received_decisions){
         this->handle_possible_decisions();
+      }
 
       auto t_end = std::chrono::high_resolution_clock::now();
       double elapsed_time_ms = std::chrono::duration<double, std::milli>(t_end-t_start).count();
@@ -158,6 +159,8 @@ namespace MultiReplicaPaxos {
 
         opt_per_sec = (this->decisions.size() * 0.8) / (elapsed_time_ms / 1000);
         std::cout << "Throughput on hotspot: " << opt_per_sec << " opts/sec" << std::endl;
+
+        this->latency();
       }
 
       std::cout << "Logging results " << std::endl;
@@ -166,6 +169,20 @@ namespace MultiReplicaPaxos {
     catch (std::exception& e){
       std::cerr << "Exception caught : " << e.what() << std::endl;
     }
+  }
+
+  void MultiReplicaPaxos::latency(){
+    int i = 0;
+
+    double time = 0.0;
+    for (const auto & [key, value] : this->proposals){
+        if (value.end > value.start){
+          i++;
+          time += std::chrono::duration<double, std::milli>(value.end-value.start).count();
+        }
+    }
+
+    std::cout << "Average latency: " << time / i << " ms" << std::endl;
   }
 
   void MultiReplicaPaxos::receive(){

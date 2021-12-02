@@ -3,7 +3,7 @@
     {
       "diskid": "0000:00:04.0",
       "nqn": "nqn.2016-06.io.spdk:cnode1",
-      "ip": "10.128.15.196",
+      "ip": "10.128.15.211",
       "port": "4420",
       "cpumask": "0x1",
       "name": "diogosobral98@instance-template-1.us-central1-a.diskpaxos"
@@ -11,7 +11,7 @@
     {
       "diskid": "0000:00:04.0",
       "nqn": "nqn.2016-06.io.spdk:cnode2",
-      "ip": "10.128.15.197",
+      "ip": "10.128.15.212",
       "port": "4420",
       "cpumask": "0x1",
       "name": "diogosobral98@instance-template-2.us-central1-a.diskpaxos"
@@ -19,7 +19,7 @@
     {
       "diskid": "0000:00:04.0",
       "nqn": "nqn.2016-06.io.spdk:cnode3",
-      "ip": "10.128.15.198",
+      "ip": "10.128.15.213",
       "port": "4420",
       "cpumask": "0x1",
       "name": "diogosobral98@instance-template-3.us-central1-a.diskpaxos"
@@ -28,22 +28,22 @@
   "processes": [
     {
       "id": "0",
-      "cpumask": "0x80",
+      "cpumask": "0x3f",
       "name": "diogosobral98@instance-template-1.us-central1-a.diskpaxos",
       "config": "test_configuration.json"
     },
     {
       "id": "1",
-      "cpumask": "0x80",
+      "cpumask": "0x3f",
       "name": "diogosobral98@instance-template-2.us-central1-a.diskpaxos",
       "config": "test_configuration.json"
     },
     {
       "id": "2",
-      "cpumask": "0x80",
+      "cpumask": "0x3f",
       "name": "diogosobral98@instance-template-3.us-central1-a.diskpaxos",
       "config": "test_configuration.json"
     }
   ],
-  "trids": "trtype:TCP adrfam:IPv4 traddr:10.128.15.196 trsvcid:4420 subnqn:nqn.2016-06.io.spdk:cnode1;trtype:TCP adrfam:IPv4 traddr:10.128.15.197 trsvcid:4420 subnqn:nqn.2016-06.io.spdk:cnode2;trtype:TCP adrfam:IPv4 traddr:10.128.15.198 trsvcid:4420 subnqn:nqn.2016-06.io.spdk:cnode3;"
+  "trids": "trtype:TCP adrfam:IPv4 traddr:10.128.15.211 trsvcid:4420 subnqn:nqn.2016-06.io.spdk:cnode1;trtype:TCP adrfam:IPv4 traddr:10.128.15.212 trsvcid:4420 subnqn:nqn.2016-06.io.spdk:cnode2;trtype:TCP adrfam:IPv4 traddr:10.128.15.213 trsvcid:4420 subnqn:nqn.2016-06.io.spdk:cnode3;"
 }

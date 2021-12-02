@@ -1,3 +1,7 @@
+extern "C" {
+	#include "spdk/env.h"
+}
+
 #include "Processes/Leader.hpp"
 #include "Disk/DiskPaxos.hpp"
 #include <chrono>
@@ -31,6 +35,42 @@ namespace LeaderPaxos {
     std::cout << "Number of Lanes: " << this->number_of_lanes << std::endl;
   }
 
+  Analyser::Analyser(int lanes){
+    this->lanes = new uint64_t[lanes];
+    this->n_concensus = 0;
+    this->total_ticks = 0;
+  }
+
+  Analyser::Analyser(){
+    this->lanes = NULL;
+    this->n_concensus = 0;
+    this->total_ticks = 0;
+  }
+
+  Analyser::~Analyser(){
+    delete this->lanes;
+  }
+
+  void Analyser::start(int i){
+    this->lanes[i] = spdk_get_ticks();
+  }
+
+  void Analyser::end(int i){
+    this->total_ticks += (spdk_get_ticks() - this->lanes[i]);
+    this->n_concensus++;
+  }
+
+  void Analyser::output(){
+    double time_sec = ((double)this->total_ticks) / ((double) spdk_get_ticks_hz());
+
+    double avg = (time_sec * 1000.0) / ((double) this->n_concensus);
+
+    std::cout << this->n_concensus << " instances on an avg of " << avg << " ms" << std::endl;
+  }
+
+
+
+  //spdk_get_ticks()
   LeaderPaxos::LeaderPaxos(int pid,int NUM_LANES){
     this->opts = LeaderPaxosOpts(NUM_LANES);
     this->latest_slot = 0;
@@ -41,6 +81,7 @@ namespace LeaderPaxos {
     this->searching = false;
     this->aborting = false;
     this->last_proposal_found = std::chrono::high_resolution_clock::now();
+    this->stats = Analyser(NUM_LANES);
   }
 
   LeaderPaxos::LeaderPaxos(int pid,LeaderPaxosOpts & leader_opts){
@@ -53,6 +94,7 @@ namespace LeaderPaxos {
     this->searching = false;
     this->aborting = false;
     this->last_proposal_found = std::chrono::high_resolution_clock::now();
+    this->stats = Analyser(this->opts.number_of_lanes);
   }
 
   /**
@@ -173,6 +215,7 @@ namespace LeaderPaxos {
       DiskPaxos::DiskPaxos * dp = this->slots[i];
       //se estiver livre ou se já tiver terminado
       if (dp == NULL && this->queues_sizes[i] > 0) {
+        this->stats.start(i);
         this->start_consensus(i);
         continue;
       }
@@ -183,8 +226,9 @@ namespace LeaderPaxos {
           break;
         }
         this->waiting_for_cleanup.insert(std::pair<int,DiskPaxos::DiskPaxos *>(dp->slot,dp));
-
+        this->stats.end(i);
         if (this->queues_sizes[i] > 0){
+          this->stats.start(i);
           this->start_consensus(i);
         }
         else {
@@ -218,6 +262,8 @@ namespace LeaderPaxos {
 
     while(this->waiting_for_cleanup.size() > 0)
       this->cleanup();
+
+    this->stats.output();
 
     std::cout << "Cleanup completed" << std::endl;
   }

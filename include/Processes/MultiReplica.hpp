@@ -67,6 +67,7 @@ namespace MultiReplicaPaxos {
       int propose(std::string command);
       void propose(std::vector<std::string>& commands);
       void cleanup();
+      void latency();
   };
 }
 
