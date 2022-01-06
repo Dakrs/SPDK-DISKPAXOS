@@ -1242,10 +1242,16 @@ static void leader_read_completion_strip(void *arg,const struct spdk_nvme_cpl *c
 
 	map<int,DiskBlock>::iterator it;
 
+	int start_slot = (ld->starting_slot / SPDK_ENV::STRIP_SIZE) * SPDK_ENV::STRIP_SIZE;
+
 	for(int i = 0; i < ld->number_of_slots; i++){
 		for (int p = 0; p < SPDK_ENV::NUM_PROCESSES; p++) {
 			for (int j = 0; j < SPDK_ENV::STRIP_SIZE; j++) {
-				it = ld->proposals.find(ld->starting_slot + j + i*SPDK_ENV::STRIP_SIZE);
+				int current_slot = start_slot + j + i*SPDK_ENV::STRIP_SIZE;
+				if (current_slot < ld->starting_slot)
+					continue;
+
+				it = ld->proposals.find(current_slot);
 
 				if (it == ld->proposals.end()){
 					string db_serialized = bytes_to_string(ld_opt->buffer + (ld_opt->size_elem * i * SPDK_ENV::STRIP_SIZE * SPDK_ENV::NUM_PROCESSES) + (ld_opt->size_elem * SPDK_ENV::NUM_PROCESSES * p) + (ld_opt->size_elem * j)); //buffer to string
@@ -1253,7 +1259,7 @@ static void leader_read_completion_strip(void *arg,const struct spdk_nvme_cpl *c
 					db.deserialize(db_serialized);
 
 					if (db.isValid()){
-						ld->proposals.insert(pair<int,DiskBlock>(ld->starting_slot + j + i*SPDK_ENV::STRIP_SIZE,db));
+						ld->proposals.insert(pair<int,DiskBlock>(current_slot,db));
 					}
 					else{
 						break;
@@ -1303,7 +1309,7 @@ static void read_list_proposals_strip(void * arg1, void * arg2){
 
 			int rc = spdk_nvme_ns_cmd_read(it->second->ns, it_qpair->second , ld_opt->buffer,
 								LBA_INDEX,
-								SPDK_ENV::STRIP_SIZE * SPDK_ENV::NUM_PROCESSES,
+								SPDK_ENV::STRIP_SIZE * SPDK_ENV::NUM_PROCESSES * ld->number_of_slots,
 								leader_read_completion_strip, ld_opt,0);
 
 			if (rc != 0) {

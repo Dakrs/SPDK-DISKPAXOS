@@ -6,6 +6,9 @@ extern "C" {
 #include "Disk/DiskPaxos.hpp"
 #include <chrono>
 #include <iostream>
+#include <string>
+#include <sstream>
+#include <fstream>
 
 namespace LeaderPaxos {
 
@@ -267,4 +270,53 @@ namespace LeaderPaxos {
 
     std::cout << "Cleanup completed" << std::endl;
   }
+
+	LeaderPaxosBench::LeaderPaxosBench(int pid,LeaderPaxosOpts & leader_opts): LeaderPaxos(pid,leader_opts){
+		this->nslot = 0;
+	}
+
+	void LeaderPaxosBench::run(){
+
+		uint64_t start = spdk_get_ticks();
+
+		while (!(std::all_of(this->queues_sizes.begin(),this->queues_sizes.end(),[](int i){return i == 0;}) &&
+			std::all_of(this->slots.begin(),this->slots.end(),[](DiskPaxos::DiskPaxos * dp){return dp == NULL;}))
+		){
+			this->manage_consensus();
+      this->cleanup(); //clean up old allocated memory for consensus
+		}
+
+		uint64_t end = spdk_get_ticks();
+
+		while(this->waiting_for_cleanup.size() > 0)
+			this->cleanup();
+
+		this->stats.output();
+
+		double time_sec = ((double)(end-start)) / ((double) spdk_get_ticks_hz());
+
+		std::cout << "Throughput on hotspot: " << ((double) this->nslot) / time_sec << " opts/sec" << std::endl;
+	}
+
+	void LeaderPaxosBench::prepare(){
+		std::string filename = "example_files/input-" + std::to_string(this->pid);
+    std::ifstream infile(filename);
+		std::string line;
+
+		try{
+			int slot = 0;
+			while (std::getline(infile,line)) {
+				int target_slot = slot % this->opts.number_of_lanes;
+				this->queues[target_slot].push(Proposal(slot,line));
+        this->queues_sizes[target_slot]++;
+				slot++;
+				this->nslot++;
+			}
+		}
+		catch (std::exception& e){
+			std::cerr << "Exception caught : " << e.what() << std::endl;
+		}
+
+		std::cout << this->nslot << " Proposals added" << std::endl;
+	}
 }

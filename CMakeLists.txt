@@ -126,6 +126,18 @@ add_executable(DiskPaxos_SimpleProcess
   src/Processes/MultiReplica.cpp
 )
 
+add_executable(DiskPaxos_Bench
+  src/Executables/benchleader.cpp
+  src/Disk/DiskBlock.cpp
+  src/Disk/DiskPaxos.cpp
+  src/Disk/SglOpts.cpp
+  src/Disk/SPDK_ENV.cpp
+  src/Processes/Leader.cpp
+  src/Processes/Replica.cpp
+  src/Processes/MultiReplica.cpp
+)
+
 include_spdk(DiskPaxos_SimpleProcess)
+include_spdk(DiskPaxos_Bench)
 include_spdk(DiskPaxos_LocalThread)
 include_spdk(Reset)

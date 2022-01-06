@@ -161,7 +161,12 @@ trids=$(jq -r '.trids' $CONFIG)
 #PROCESSES LANES PID cpumask
 diskpaxos_launch(){
   cd thesis/Thesis/build
-  sudo ./DiskPaxos_SimpleProcess --processes $1 --lanes $2 --pid $3 --cpumask $4 --nvmf "$5" --config $6 &> logs/log_pid_$3.log
+  if [ -z $7 ]
+  then
+    sudo ./DiskPaxos_Bench --processes $1 --lanes $2 --pid $3 --cpumask $4 --nvmf "$5" --config $6 &> logs/log_pid_$3.log
+  else
+    sudo ./DiskPaxos_Bench --processes $1 --lanes $2 --pid $3 --cpumask $4 --nvmf "$5" --config $6 --leader &> logs/log_pid_$3.log
+  fi
   return 0
 }
 
@@ -172,7 +177,7 @@ for row in $(echo "${jsonProcesses}" | jq -r '.[] | @base64'); do
    echo ${row} | base64 --decode | jq -r ${1}
   }
   echo -e "\t Launching Process $(_jq '.id')"
-  (ssh $(_jq '.name') "$(typeset -f diskpaxos_launch); diskpaxos_launch $PROCESSES $LANES $(_jq '.id') $(_jq '.cpumask') \"$trids\"" $(_jq '.config') && echo -e "\tProcess $(_jq '.id') exited successfully")&
+  (ssh $(_jq '.name') "$(typeset -f diskpaxos_launch); diskpaxos_launch $PROCESSES $LANES $(_jq '.id') $(_jq '.cpumask') \"$trids\"" $(_jq '.config') $(_jq '.leader') && echo -e "\tProcess $(_jq '.id') exited successfully")&
 done
 
 echo -e "\nFinished Launching consensus processes"

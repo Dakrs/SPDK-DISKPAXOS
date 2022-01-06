@@ -101,6 +101,7 @@ namespace MultiReplicaPaxos {
     std::ifstream infile(filename);
     std::string line;
     //int n_lines = 0;
+
     auto t_start = std::chrono::high_resolution_clock::now();
     try{
 

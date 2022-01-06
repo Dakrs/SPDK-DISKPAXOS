@@ -188,6 +188,7 @@ int main(int argc, char *argv[]) {
 
   std::cout << "Consensus blocks reseted" << '\n';
 
+  /**
   if (N_PROPOSALS > 512){
     m_div = N_PROPOSALS / n_blocks;
     remaining = N_PROPOSALS % n_blocks;
@@ -231,6 +232,7 @@ int main(int argc, char *argv[]) {
     f3.get();
   }
   std::cout << "Proposals blocks reseted" << '\n';
+  */
 
   //DiskTest disktest(20,4,argv[4],"trtype:TCP adrfam:IPv4 traddr:127.0.0.1 trsvcid:4420 subnqn:nqn.2016-06.io.spdk:cnode1"); //lanes, n_processes
   //disktest.run_every_test(1000);

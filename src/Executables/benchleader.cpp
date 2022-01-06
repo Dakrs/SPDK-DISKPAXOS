@@ -215,22 +215,18 @@ int main(int argc, char *argv[]) {
 
   //std::vector<std::string> example {"trtype:TCP adrfam:IPv4 traddr:127.0.0.1 trsvcid:4420 subnqn:nqn.2016-06.io.spdk:cnode1"};
   SPDK_ENV::SPDK_ENV_OPTS env_opts;
-  MultiReplicaPaxos::MultiReplicaPaxosOpts replica_opts;
   LeaderPaxos::LeaderPaxosOpts leader_opts;
 
   if (strip_size > 0){
     env_opts = SPDK_ENV::SPDK_ENV_OPTS(N_PROCESSES,N_LANES,cpumask,app_name,qpair_queue_size,qpair_queue_request,strip_size);
     leader_opts = LeaderPaxos::LeaderPaxosOpts(N_LANES,number_of_slots_to_read,true);
-    replica_opts = MultiReplicaPaxos::MultiReplicaPaxosOpts(read_amount_replica,proposal_interval, config_file.size() > 0,strip_size);
   }
   else{
     env_opts = SPDK_ENV::SPDK_ENV_OPTS(N_PROCESSES,N_LANES,cpumask,app_name,qpair_queue_size,qpair_queue_request);
     leader_opts = LeaderPaxos::LeaderPaxosOpts(N_LANES,number_of_slots_to_read,false);
-    replica_opts = MultiReplicaPaxos::MultiReplicaPaxosOpts(read_amount_replica,proposal_interval, config_file.size() > 0, 0);
   }
 
   env_opts.print();
-  replica_opts.print();
   leader_opts.print();
 
 
@@ -242,32 +238,11 @@ int main(int argc, char *argv[]) {
     SPDK_ENV::spdk_start(env_opts,trids);
   }
 
-  /**
+  LeaderPaxos::LeaderPaxosBench lpb(PID,leader_opts);
 
-  LeaderPaxos::LeaderPaxos lp(PID,leader_opts);
-  std::thread* leader_thread = nullptr;
+  lpb.prepare();
+  lpb.run();
 
-  if (leader){
-    leader_thread = new std::thread(&LeaderPaxos::LeaderPaxos::run,&lp);
-  }
-
-  MultiReplicaPaxos::MultiReplicaPaxos rp(PID,replica_opts);
-  rp.run();
-
-  if (leader_thread){
-    leader_thread->join();
-    delete(leader_thread);
-  }
-
-  std::cout << "Exiting and starting spdk closure" << std::endl;*/
-
-
-  LeaderPaxos::LeaderPaxos lp(PID,leader_opts);
-  std::thread leader_thread(&LeaderPaxos::LeaderPaxos::run,&lp);
-  MultiReplicaPaxos::MultiReplicaPaxos rp(PID,replica_opts);
-  rp.run();
-  std::cout << "Exiting and starting spdk closure" << std::endl;
-  leader_thread.join();
 
 
   SPDK_ENV::spdk_end();
